@@ -1,44 +1,48 @@
-/**
- * @file routes/items.js
- * @description Item listing routes.
- *
- * Base path (registered in server.js): /api/items
- *
+/**  intro of this file
+ @file routes/items.js  -> This file contains all the routes related to items.
+ @description Item listing routes. -> This file contains routes such as: POST /api/items, GET /api/items, GET /api/items/:id, PUT /api/items/:id, DELETE /api/items/:id
+                                        Currently, you've implemented the POST route.
+ 
+ * Base path (registered in server.js):  /api/items
+
  * Middleware Chain for POST /:
- *
- *   Request
- *      │
- *      ▼
- *   protect                ← Verifies JWT, attaches req.user
- *      │
- *      ▼
- *   upload.array('images', 3)   ← Multer parses multipart/form-data,
- *      │                           validates file types, fills req.files[]
- *      │                           and req.body (text fields)
- *      ▼
- *   createItem             ← Controller: uploads to Cloudinary, saves to MongoDB
- *
+ 
+    Request               ──► A user clicks: List Item, React sends : POST /api/items , The request reaches Express , First Middleware : protect run
+       │
+       ▼
+    protect                ──► This middleware checks, Is this user logged in? , It verifies the JWT. If valid, it adds : req.user
+       │
+       ▼
+    upload.array('images', 3)   ──► Multer runs. Its jobs are : Read multipart/form-data , Read uploaded files , Store files in memory. Create  req.files and req.body
+        |                         Suppose React : sends, Title, Laptop, Price, 25000, Images and 3 photos
+        |                        After Multer : req.body = { title:"Laptop", price:"25000" } and
+        |                                      req.files = [ file1, file2, file3 ]
+        ▼
+    createItem            ──► Now everything is ready. So controller can :
+                                Upload images(to Cloudinary) , Save item(to MongoDB) , Return response
+ 
  * The order of middleware matters:
- *   1. `protect` runs FIRST because we want to reject unauthenticated users
- *      BEFORE spending resources parsing and holding files in memory.
- *   2. `upload` runs SECOND to parse the multipart body.
- *   3. `createItem` runs LAST once we have both a verified user and the files.
- *
+     1. `protect` runs FIRST because we want to reject unauthenticated users
+        BEFORE spending resources parsing and holding files in memory.
+     2. `upload` runs SECOND to parse the multipart body.
+     3. `createItem` runs LAST once we have both a verified user and the files.
+  
  * Multer Error Handling:
- *   Multer throws its own error class `MulterError` for things like:
- *   - LIMIT_FILE_SIZE   : A file exceeded the 5MB limit
- *   - LIMIT_FILE_COUNT  : More than 3 files were sent
- *   - LIMIT_UNEXPECTED_FILE: A field name other than 'images' was used
- *   We catch these in a custom wrapper and return clean JSON errors.
- *
+     Multer throws its own error class `MulterError` for things like:
+        - LIMIT_FILE_SIZE      : File Too Large ──► A file exceeded the 5MB limit
+        - LIMIT_FILE_COUNT     : Too Many Images ──► More than 3 files were sent
+        - LIMIT_UNEXPECTED_FILE: Wrong Field Name ──► A field name other than 'images' was used
+        We catch these in a custom wrapper and return clean JSON errors.
+ 
  * Available Routes:
- *   POST   /api/items     → Create a new listing (Private)
+      POST   /api/items     → Create a new listing (Private)
  */
 
-const express            = require('express');
-const { protect }        = require('../middleware/authMiddleware');
-const upload             = require('../middleware/upload');
-const { createItem }     = require('../controllers/itemController');
+const express = require('express');  // Import Express to create a router
+const { protect } = require('../middleware/authMiddleware'); // Import the protect middleware to secure routes
+const upload = require('../middleware/upload'); // Import the Multer upload middleware for handling file uploads
+const { createItem } = require('../controllers/itemController'); // Import the createItem controller function to handle item creation logic
+ 
 
 const router = express.Router();
 
@@ -51,10 +55,8 @@ Multer reports upload errors through a callback instead of throwing them like no
                          - Too many files
                          - Wrong field name
         it doesn't throw the error.
-        Instead, it passes it as:
-                           (err) => {
-                               ...
-                           }
+        Instead of this, it passes it on:
+                           (err) => { .... }
  that's why 
      Instead of `upload.array(...)` directly, wrap it with this function.
 */
@@ -88,7 +90,7 @@ const handleUpload = (req, res, next) => {
         message: err.message,
       });
     }
-    // No error — pass control to the next middleware (createItem controller)
+    // if No error — pass control to the next middleware (createItem controller)
     next();
   });
 };

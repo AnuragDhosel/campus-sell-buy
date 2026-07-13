@@ -8,45 +8,76 @@
 // ─── Core Imports ────────────────────────────────────────────────────────────
 const express = require('express');
 const dotenv  = require('dotenv'); // sothat we can load environment variables from a .env file into process.env
-const cors    = require('cors');  // imports the CORS package.
+const cors = require('cors');   // Middleware that enables Cross-Origin Resource Sharing (CORS).
 /*
-1. Problem Without CORS
-    React Frontend  : http://localhost:3000
-    Express Backend : http://localhost:5000
+===============================================================================
+Why is CORS needed?
+===============================================================================
 
-React tries to fetch data : fetch("http://localhost:5000/api/health")
-The browser sees : 3000 → 5000
+Frontend : http://localhost:3000
+Backend  : http://localhost:5000
 
-Different ports = Different origins.
-So the browser blocks the request and shows:
-        Access to fetch at  'http://localhost:5000/api/health'
-         from origin  'http://localhost:3000'
-      and
-        has been blocked by CORS policy
+Although both are running on localhost, they use different ports.
+Different ports = Different Origins.
 
-2. How 'app.use(cors())' Fixes It
-    app.use(cors());  ->  This tells Express: "Allow requests from other origins."
-    Behind the scenes Express adds '*' headers like: "Access-Control-Allow-Origin: * "    to every response.
-    Now when React requests : fetch("http://localhost:5000/api/health")
-    the browser sees : "Access-Control-Allow-Origin: * "  and allows the response.        
+Example:
+
+    fetch("http://localhost:5000/api/health")
+
+Since the request is being made from port 3000 to port 5000,
+the browser's Same-Origin Policy blocks it by default.
+
+Browser Error:
+
+    Access to fetch at 'http://localhost:5000/api/health'
+    from origin 'http://localhost:3000'
+    has been blocked by CORS policy.
+
+-------------------------------------------------------------------------------
+How app.use(cors()) solves this
+-------------------------------------------------------------------------------
+
+app.use(cors());
+
+This middleware adds the necessary HTTP response headers, such as:
+
+    Access-Control-Allow-Origin: *
+
+When the browser receives these headers, it knows that the backend
+explicitly allows requests from other origins, so it permits the
+frontend to access the response.
+
+===============================================================================
+Note:
+===============================================================================
+
+Using '*' allows requests from any origin.
+
+For production, it's more secure to allow only your frontend domain:
+
+app.use(cors({
+    origin: "https://your-frontend-domain.com"
+}));
+
 */
+
+
+// ─── Load Environment Variables ───────────────────────────────────────────────
+// Must be called BEFORE any code that references process.env
+// Loads .env variables into process.env, so they can be accessed anywhere in the application.
+dotenv.config();
 
 
 // ─── Route Imports ───────────────────────────────────────────────────────────
 const authRoutes  = require('./routes/auth');
 const itemsRoutes = require('./routes/items'); // Day 3: Item listing routes
 
-// ─── Middleware Imports ───────────────────────────────────────────────────────
+// ─── Middleware Imports , check authentication ────────────────────────────────
 const { protect } = require('./middleware/authMiddleware');
 
 
 // ─── Database Connection ──────────────────────────────────────────────────────
 const connectDB = require('./config/db');
-
-// ─── Load Environment Variables ───────────────────────────────────────────────
-// Must be called BEFORE any code that references process.env
-// Loads .env variables into process.env so they can be accessed anywhere in the application.
-dotenv.config();
 
 // ─── Connect to MongoDB ───────────────────────────────────────────────────────
 connectDB();

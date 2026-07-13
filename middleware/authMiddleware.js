@@ -45,7 +45,7 @@ const protect = async (req, res, next) => {
     //   a) Checks the token's signature against our JWT_SECRET.
     //   b) Checks the token's expiry (exp claim).
     // If either check fails, it throws an error caught below.
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // it returns the decoded payload if the token is valid.
 
     // Fetch the full user from DB using the `id` we stored in the JWT payload.
     // `.select('-password')` explicitly excludes the password field as a

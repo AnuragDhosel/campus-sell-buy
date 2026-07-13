@@ -1,67 +1,93 @@
 /**
- * @file middleware/upload.js
- * @description Multer middleware for intercepting multipart/form-data file uploads.
- *
- * ─── Why "memoryStorage" and NOT "diskStorage"? ───────────────────────────────
- *
+  @file middleware/upload.js  : This file configures Multer -> Think of Multer as a gatekeeper for uploaded files.
+  @description Multer middleware for intercepting multipart/form-data file uploads.
+                    
+ 
+  ─── Why "memoryStorage" and NOT "diskStorage"? ───────────────────────────────
+ 
  * There are two ways Multer can hold a file while processing your request:
- *
- * Option A: diskStorage → saves the file to the server's hard disk first,
- *   then you read it back and upload it to Cloudinary, then delete the temp file.
- *   Downsides: 3 I/O operations, temp files to manage, slower.
- *
- * Option B: memoryStorage → holds the file as a raw Buffer in RAM.
- *   You get `req.files`, each with a `.buffer` property containing the file's bytes.
- *   You then pipe that buffer DIRECTLY to Cloudinary's upload stream.
- *   Downsides: Large files can exhaust RAM (fine for our 3-image limit with a size cap).
- *
- * We use memoryStorage because it is faster, has no disk cleanup burden,
- * and is the standard pattern for Buffer → Cloud stream pipelines.
- *
- * ─── The Upload Flow (Buffer → Stream → Cloudinary) ──────────────────────────
- *
- *   Browser           Express / Multer         Our Controller          Cloudinary
- *   ──────            ────────────────         ──────────────          ──────────
- *   POST form-data ──→ memoryStorage ──→ req.files[n].buffer ──→ upload_stream ──→ stored
- *
- *   Step 1: Multer intercepts the multipart request, reads each file part,
- *           and stores the raw bytes in `req.files[n].buffer` (a Node.js Buffer).
- *
- *   Step 2: In the controller, for each buffer we call:
- *             cloudinary.uploader.upload_stream(options, callback)
- *           This returns a writable stream that points to Cloudinary's servers.
- *
- *   Step 3: We use `streamifier.createReadStream(buffer)` to wrap the raw
- *           Buffer into a Node.js Readable stream.
- *
- *   Step 4: We `.pipe()` the Readable (our image bytes) into the Writable
- *           (Cloudinary's upload endpoint). Cloudinary receives the bytes,
- *           stores the image, and calls back with the result (including secure_url).
+    - Option A: diskStorage → saves the file to the server's hard disk first,
+            - flow :
+                  User Uploads Image → Multer → Save Image on Server Disk → Read Image from Disk → Upload to Cloudinary → Delete Local Image
+            - Notice : 
+                  Three extra operations : Save , Read , Delete
+                  so, This is slower.
+         
+    - Option B: memoryStorage → holds the file as a raw Buffer in RAM.
+            - flow : 
+                  User Uploads Image → Multer → RAM (Buffer) → Cloudinary
+            - Notice : 
+                  No extra operations, so this is faster.
+                  No disk, No temporary files, Much faster.
+            - You get `req.files`, each with a `.buffer` property containing the file's bytes.
+            - You then pipe that buffer DIRECTLY to Cloudinary's upload stream.
+            - Why did you choose memoryStorage?
+                  Because : Faster, Less code, No temporary files and Perfect when uploading directly to Cloudinary 
+            - Downsides: 
+                  Large files can exhaust RAM (fine for our 3-image limit with a size cap) bcz of the limited RAM available.
+ 
+  ─── The Upload Flow (Buffer → Stream → Cloudinary) ──────────────────────────
+ 
+            Browser
+              ↓
+            Express
+              ↓
+            Multer
+              ↓
+            Buffer
+              ↓
+            Cloudinary
+              ↓
+            MongoDB
+
+
+Step 1 : Browser sends : multipart/form-data, which containing : Title , Price , Images
+
+Step 2 : Multer intercepts it.
+         Meaning : Before controller runs, Multer reads everything.
+        - It creates : req.body , for text fields  and 
+                       req.files , for image 
+
+Step 3 : Each image becomes : req.files[i].buffer 
+      - Example : 
+            req.files = [ { buffer:<Buffer...> }, { buffer:<Buffer...> } .. ]
+
+Step 4: The controller converts the Buffer into a Readable Stream using streamifier and pipes it to 
+        Cloudinary's upload stream.
+
+Step 5 : Cloudinary stores image and returns secure_url
+         MongoDB stores only secure_url, not image.
+
  */
 
-const multer = require('multer');
+const multer = require('multer'); // Import Multer to handle multipart/form-data (file uploads)
 
-// ── Storage Strategy: Memory ──────────────────────────────────────────────────
-// memoryStorage tells Multer NOT to save files to disk.
-// Instead, each file is stored as a raw binary Buffer at req.files[n].buffer.
-// This buffer is what we stream directly to Cloudinary in the controller.
+
+/* ── Storage Strategy: memoryStorage ──────────────────────────────────────────────────
+  uploaded files on ram and store them in memory as Buffer objects.
+    Then every image becomes : req.file.buffer or req.files[i].buffer */
 const storage = multer.memoryStorage();
 
-// ── File Filter: Reject Non-Images ────────────────────────────────────────────
-// This function is called by Multer for EVERY file in the upload request.
-// It acts as a gatekeeper — only letting valid image types through.
+/* ── File Filter: checks -> Is the uploaded file really an image? ────────────────────────────────────────────
+This function is called by Multer for EVERY file in the upload request.
+It acts as a gatekeeper — only letting valid image types through. */
 const imageFileFilter = (req, file, callback) => {
-  // `file.mimetype` is set by the browser (e.g. "image/jpeg", "image/png").
-  // We whitelist only the formats we accept.
-  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  /* `file.mimetype` is set by the browser (e.g. "image/jpeg", "image/png").
+  - Suppose someone uploads : 
+      - resume.pdf , MIME type : application/pdf , Not allowed -> Rejected.
+      - laptop.jpg , MIME type : image/jpeg , Allowed -> Accepted.
+
+  - What is MIME Type?
+        - Every uploaded file has a MIME Type.
+          Example : image/jpeg, image/png, application/pdf, video/mp4, text/plain
+        - Instead of checking : .jpg , 
+                     we check : image/jpeg -> because it is more reliable. */
+  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png']; // Only : JPEG , JPG , PNG are allowed, Everything else Rejected
 
   if (allowedMimeTypes.includes(file.mimetype)) {
-    // null as first arg means "no error"
-    // true as second arg means "accept this file"
-    callback(null, true);
-  } else {
-    // Passing an Error object causes Multer to reject the file and
-    // forward the error to Express's global error handler.
+    callback(null, true); // null = no error , true = accept this file
+  } 
+  else {
     callback(
       new Error('Invalid file type. Only JPEG, JPG, and PNG images are allowed.'),
       false // false = reject this file
@@ -69,22 +95,19 @@ const imageFileFilter = (req, file, callback) => {
   }
 };
 
+
 // ── Multer Instance ───────────────────────────────────────────────────────────
-// We create the configured Multer instance here once and export it.
+// Here you create, your own Multer object.
 const upload = multer({
-  storage: storage,         // Use RAM buffer, not disk
-  fileFilter: imageFileFilter, // Reject non-image files at the middleware layer
+  storage: storage,         // Where to store? -> Use RAM buffer, not disk
+  fileFilter: imageFileFilter, // Which files allowed? -> Reject non-image files at the middleware layer
 
-  limits: {
-    // Cap each individual file at 5MB.
-    // This prevents memory exhaustion from huge uploads.
-    // 5 * 1024 * 1024 = 5,242,880 bytes = 5 MB
-    fileSize: 5 * 1024 * 1024,
-
-    // Absolutely cap the number of files at 3.
-    // This is the hard enforcement — even if the client tries to send 10 files,
-    // Multer will reject the request with a MulterError('LIMIT_FILE_COUNT').
-    files: 3,
+  // How many? and How big?
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // How big?  -> 5 * 1024 * 1024 = 5,242,880 bytes = 5 MB 
+                            // Each file must be under 5MB. Multer will reject larger files automatically.
+    files: 3, // How many? -> 3 files max. 
+              // if user uploads: 10 images, Multer immediately throws : LIMIT_FILE_COUNT
   },
 });
 
@@ -93,4 +116,4 @@ const upload = multer({
 // In the route file, we will call: upload.array('images', 3)
 // - 'images'  → the form-data field name the frontend must use for files
 // - 3         → maximum number of files accepted (second line of defense)
-module.exports = upload;
+module.exports = upload; // export the configured Multer instance so it can be used in route files.
