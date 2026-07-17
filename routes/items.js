@@ -1,7 +1,7 @@
 /**  intro of this file
  @file routes/items.js  -> This file contains all the routes related to items.
  @description Item listing routes. -> This file contains routes such as: POST /api/items, GET /api/items, GET /api/items/:id, PUT /api/items/:id, DELETE /api/items/:id
-                                        Currently, you've implemented the POST route.
+                                         Currently implemented: POST (create), GET (browse/search), PUT report.
  
  * Base path (registered in server.js):  /api/items
 
@@ -34,14 +34,16 @@
         - LIMIT_UNEXPECTED_FILE: Wrong Field Name ──► A field name other than 'images' was used
         We catch these in a custom wrapper and return clean JSON errors.
  
- * Available Routes:
-      POST   /api/items     → Create a new listing (Private)
+ * Available Routes (Day 3 + Day 4):
+      POST   /api/items            → Create a new listing (Private)
+      GET    /api/items             → Browse/search items with filters (Public)
+      PUT    /api/items/:id/report  → Report an item (Private)
  */
 
 const express = require('express');  // Import Express to create a router
 const { protect } = require('../middleware/authMiddleware'); // Import the protect middleware to secure routes
 const upload = require('../middleware/upload'); // Import the Multer upload middleware for handling file uploads
-const { createItem } = require('../controllers/itemController'); // Import the createItem controller function to handle item creation logic
+const { createItem, getItems, reportItem } = require('../controllers/itemController'); // Import all controller functions
  
 
 const router = express.Router();
@@ -100,5 +102,46 @@ const handleUpload = (req, res, next) => {
 // Protected: requires a valid JWT in the Authorization header.
 // Body: multipart/form-data with text fields + up to 3 image files.
 router.post('/', protect, handleUpload, createItem);
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  DAY 4: Browse/Search & Report Routes
+// ═════════════════════════════════════════════════════════════════════════════
+
+
+/* ── GET /api/items ────────────────────────────────────────────────────────────
+Browse and search marketplace listings.
+Public: no token required — anyone can discover items.
+
+Supported query parameters (all optional):
+  ?search=laptop          → Fuzzy search in title AND description
+  ?category=Electronics   → Exact match on category
+  ?collegeName=MITS        → Exact match on college
+
+These can be combined:
+  GET /api/items?search=book&category=Books&collegeName=MITS
+
+Behavior:
+  - Only returns items where status === 'available'
+  - Results are sorted newest-first (createdAt: -1)
+  - hostelName and roomNumber are NEVER returned (select: false in schema) */
+router.get('/', getItems);
+
+
+/* ── PUT /api/items/:id/report ─────────────────────────────────────────────────
+Report a listing that violates marketplace rules.
+Protected: only logged-in users can report (prevents anonymous spam reports).
+
+How it works:
+  1. User sends: PUT /api/items/abc123/report (with Bearer token)
+  2. Server checks: Has this user already reported this item?
+     - Yes → 400 "You have already reported this item"
+     - No  → Adds user's ID to the reports[] array
+  3. If reports[] now has 5 or more unique reporters:
+     → Item's status auto-changes to 'hidden'
+     → Item disappears from all public search results
+     → Admin can review later */
+router.put('/:id/report', protect, reportItem);
+
 
 module.exports = router;

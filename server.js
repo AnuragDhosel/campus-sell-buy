@@ -10,6 +10,11 @@ const express = require('express');
 const dotenv  = require('dotenv'); // sothat we can load environment variables from a .env file into process.env
 const cors = require('cors');   // Middleware that enables Cross-Origin Resource Sharing (CORS).
 /*
+what is CORS?
+  "CORS is a browser security feature that controls whether a frontend application is allowed to 
+  communicate with a backend running on a different origin. It prevents unauthorized websites from 
+  accessing backend resources."
+
 ===============================================================================
 Why is CORS needed?
 ===============================================================================
@@ -79,8 +84,21 @@ const { protect } = require('./middleware/authMiddleware');
 // ─── Database Connection ──────────────────────────────────────────────────────
 const connectDB = require('./config/db');
 
+// ─── Background Jobs ─────────────────────────────────────────────────────────
+const startCronJobs = require('./utils/cronJob'); // Day 4: Midnight listing expiry , import the cron job function
+
 // ─── Connect to MongoDB ───────────────────────────────────────────────────────
 connectDB();
+
+// ─── Start Background Cron Jobs ───────────────────────────────────────────────
+// Called AFTER connectDB() because the cron job queries MongoDB.
+// If DB is not connected, the cron queries would fail.
+startCronJobs(); 
+/*  "startCronJobs() :
+        is a function that starts the cron scheduler when the server starts. It doesn't execute the scheduled 
+    task immediately. Instead, it registers the cron schedules with Node-Cron. After that, Node-Cron waits for 
+  the specified time, such as midnight, and automatically runs the scheduled task without any user request."
+*/
 
 // ─── Initialize Express App ───────────────────────────────────────────────────
 const app = express();

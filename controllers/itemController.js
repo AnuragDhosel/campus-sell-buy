@@ -80,8 +80,7 @@ const Item          = require('../models/Item');
 
 // ─── Helper: Upload a Single Buffer to Cloudinary ────────────────────────────
 
-/**
- * The main idea is very simple:
+/** The main idea is very simple:
         - Multer gives us the image in Buffer form in ram. Cloudinary cannot directly upload a Buffer using 
           upload_stream(). So we convert the Buffer into a Stream and send it to Cloudinary.
  
@@ -321,14 +320,27 @@ const createItem = async (req, res) => {
     const cloudinaryResults = await Promise.all(uploadPromises); // Waits for all uploads to finish (or any to fail)
 
 
-    /* ── Step 4: Extract secure URLs from Cloudinary results ───────────────
-    Each result object has many fields. We only need `secure_url` —
-    because MongoDB doesn't store images. It stores only URLs.
-    Finally: ["https://abc.jpg", "https://xyz.jpg", "https://pqr.jpg"]
-    Example secure_url:
-      "https://res.cloudinary.com/your_cloud/image/upload/v1234/campus_marketplace/items/abc123.jpg" 
+/* ── Step 4: Extract image data from Cloudinary results ──────────────────
+              look media notes of models/items.js file
+    Each Cloudinary result object contains many fields. We extract TWO:
+      - secure_url  → The permanent HTTPS link to the stored image.
+      - public_id   → Cloudinary's unique identifier for this asset.
+
+    WHY store public_id?
+      to delete the omage from cloudinary 
+
+    Example Cloudinary result:
+      {
+        secure_url: "https://res.cloudinary.com/your_cloud/image/upload/v1234/campus_marketplace/items/abc123.jpg",
+        public_id:  "campus_marketplace/items/abc123",
+        width: 1200, height: 800, format: "jpg", ...
+      }
+    We only keep url and publicId — the rest is metadata we don't need.
     */
-    const imageUrls = cloudinaryResults.map((result) => result.secure_url);
+    const imageData = cloudinaryResults.map((result) => ({
+      url:      result.secure_url,  // Permanent HTTPS link (displayed on frontend)
+      publicId: result.public_id,   // Cloudinary asset ID (used for future delete/replace)
+    }));
 
     /* ── Step 5: Create the Item document in MongoDB ────────────────────────
     We use `Item.create()` which is shorthand for `new Item({...}).save()`.
@@ -346,7 +358,7 @@ const createItem = async (req, res) => {
       collegeName,
       hostelName,
       roomNumber,
-      images:      imageUrls,       // Array of Cloudinary HTTPS URLs
+      images:      imageData,        // Array of { url, publicId } objects (not plain strings anymore)
       seller:      req.user.id,     // From JWT via protect middleware (tamper-proof) , not req.body.seller bcz users can change it 
     });
 
@@ -422,3 +434,294 @@ Why don't we store images in MongoDB?
 
 The actual image stays in Cloudinary.
 */
+
+
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  DAY 4: Advanced Database Filtering, Moderation & Reporting
+// ═════════════════════════════════════════════════════════════════════════════
+
+
+// ─── Controller: Get Items (Search, Filter, Sort) ────────────────────────────
+
+/*
+  @controller getItems  — name of this controller function.
+  @route   GET /api/items  —  Frontend calls GET to /api/items and This controller executes.
+  @access  Public     —      anyone can browse the marketplace without logging in. No login required.
+  @desc    — Returns a list of items with dynamic search, filtering, and sorting depending on what the user sends.
+
+* ─── How the Dynamic Filter Object Works ──────────────────────────────────────
+
+  We start with a base filter: { status: 'available' }
+    This ensures that hidden, sold, archived, or flagged items are NEVER shown.
+
+  Then we conditionally add more filters based on what the user sends in req.query.
+
+  Example 1: GET /api/items
+    → filter = { status: 'available' }
+    → returns ALL available items
+
+  Example 2: GET /api/items?category=Books
+    → filter = { status: 'available', category: 'Books' }
+    → returns only available Books
+
+  Example 3: GET /api/items?search=laptop&collegeName=MITS
+    → filter = {
+        status: 'available',
+        collegeName: 'MITS',
+        $or: [
+          { title: { $regex: 'laptop', $options: 'i' } },
+          { description: { $regex: 'laptop', $options: 'i' } }
+        ]
+      }
+    → returns available items from MITS where title OR description contains "laptop"
+
+* ─── MongoDB Operators Used ────────────────────────────────────────────────────
+
+  * $regex  : Pattern matching - A MongoDB query operator that matches strings using regular expressions.
+              Suppose : Database contains : Old Laptop , Gaming Laptop , Laptop Bag , Phone
+                        Search : lap 
+                        Matches : Old Laptop , Gaming Laptop , Laptop Bag 
+                          because lap exists inside.
+
+  * $options: 'i'  : The 'i' flag makes the regex case-insensitive.
+              Without 'i': "laptop" would NOT match "Laptop" or "LAPTOP"
+              With 'i': "laptop" matches "Laptop", "LAPTOP", "lApToP", etc.
+
+  * $or: [condition1, condition2] → Returns the document if EITHER condition1 OR condition2 is true.     
+              A logical operator. Returns documents that match at LEAST ONE of the conditions in its array. 
+              Suppose : Database contains : Title -> Gaming Laptop , Description -> 8GB RAM
+                        Search : RAM
+                        Title -> No Match , Description -> Match
+                        Should document return? Yes. -> That's why , we used $or
+                        Meaning : Either Title OR Description must match.       
+ */
+
+const getItems = async (req, res) => {
+  try {
+    /* ── Step 1: Extract query parameters ────────────────────────────────────
+    req.query contains the 'key-value pairs' after the ? in the URL.
+    Example: URL : GET /api/items?search=laptop&category=Electronics&collegeName=MITS
+      Express creates :
+              → req.query = { search: 'laptop', category: 'Electronics', collegeName: 'MITS' }
+                If a parameter is not provided, it will be undefined. */
+    const { search, category, collegeName } = req.query;
+
+    /* ── Step 2: Build the base filter ───────────────────────────────────────
+    CRITICAL: We always start with status: 'available'.
+    This is the DEFAULT safety net — it ensures that reported/hidden/sold items
+    are NEVER returned to the public browsing API.
+    
+    Without this filter, a user could see hidden or flagged items,
+    which would defeat the purpose of our entire moderation system. */
+    const filter = { status: 'available' };
+
+    /* ── Step 3: Conditionally add category filter ───────────────────────────
+    If the frontend sends ?category=Books, we add it to the filter.
+    Now filter becomes : { status:"available" , category:"Books" }
+    This is an EXACT match — "Books" won't match "books" or "BOOKS"
+    (unlike $regex). Mongoose will query: { status: 'available', category: 'Books' } */
+    if (category) {
+      filter.category = category;
+    }
+
+    /* ── Step 4: Conditionally add collegeName filter ─────────────────────────
+    If the frontend sends ?collegeName=MITS, we add it to the filter.
+    Now filter becomes : { status:"available", category:"Books", collegeName:"MITS" }
+    Same logic — an exact match on the college name.
+    This allows students to browse items listed only on their campus. */
+    if (collegeName) {
+      filter.collegeName = collegeName;
+    }
+
+/*  ── Step 5: Conditionally add search (fuzzy match) ──────────────────────
+    If the user provides a search term, we use MongoDB's $regex operator to perform a case-insensitive substring search.
+    
+    We wrap it in $or so the search term is checked against BOTH fields:
+      - title       → "Old Laptop for Sale" matches "laptop"
+      - description → "8GB RAM, good condition" matches "ram"
+    
+    Suppose the frontend sends : GET /api/items?search=Laptop  or  user search Laptop
+    after the Destructuring , search=Laptop 
+    Filter becomes
+          filter.$or=[ 
+                  { title:{ $regex:Laptop, $options:"i" } }, 
+                  { description:{ $regex:Laptop , $options:"i" } }
+                ]
+      Meaning : Find documents whose title contains Laptop OR description contains Laptop.
+    */
+    if (search) {
+      filter.$or = [
+        { title:       { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+    
+    /* ── Step 6: Execute the query ───────────────────────────────────────────
+    .find(filter)     → Returns all documents matching our filter object  , 
+                        suppose : filter = { status:"available", category:"Books" }
+                        MongoDB automatically executes : SELECT * FROM Items WHERE status='available' AND category='Books'
+                        and return all documents matching our filter object
+ .sort(createdAt:-1)  → Sorts results newest to oldest (-1 means newest to oldest , 1 means oldest to newest)
+    .populate(...)    → Replaces the seller ObjectId with actual user data (name, email)
+                        This is a Mongoose JOIN — it reads from the User collection
+                        and inserts the matching document in place of the ObjectId.
+    
+    Note: hostelName and roomNumber have `select: false` in the schema,
+    so they are automatically excluded from all queries — no extra work needed here. */
+    const items = await Item.find(filter)
+      .sort({ createdAt: -1 })            // Newest listings first
+      .populate('seller', 'name email');   // Show seller name & email, hide password
+
+    // ── Step 7: Return results ──────────────────────────────────────────────
+    res.status(200).json({
+      success: true,
+      count: items.length,  // Useful for the frontend to display "23 items found"
+      data: items, 
+    });
+
+  } 
+  catch (error) {
+    console.error(`Get Items Error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching items. Please try again.',
+    });
+  }
+};
+
+
+// ─── Controller: Report Item ─────────────────────────────────────────────────
+
+/** 
+  @controller reportItem  —  The controller function name is
+  @route   PUT /api/items/:id/report  —   Which API endpoint calls this function.
+  @access  Private (JWT required — only logged-in users can report)
+  @desc    Allows a user to report a listing. If 5 unique users report an item,
+           it is automatically hidden from the marketplace.
+
+  ─── @The Auto-Hide Moderation System ──────────────────────────────────────────
+
+  This is a community-driven moderation approach:
+
+  reports: 0  → Item is visible       (status: 'available')
+  reports: 1  → Item is visible       (1 report is not enough to hide)
+  reports: 2  → Item is visible
+  reports: 3  → Item is visible
+  reports: 4  → Item is visible
+  reports: 5  → 🚨 THRESHOLD REACHED → Item auto-hides (status: 'hidden')
+
+  Why 5 reports?
+    - 1 report could be a mistake or a personal grudge.
+    - 5 reports from 5 DIFFERENT users is a strong community signal
+      that something is genuinely wrong with the listing.
+    - The admin can review hidden items later and decide to restore or delete them.
+
+  Duplicate Protection:
+    - Before adding a report, we check if this user already reported this item.
+    - This prevents a single angry user from reporting the same item 5 times
+      to get it hidden. Each report MUST come from a unique user.
+ */
+const reportItem = async (req, res) => {
+  try {
+/*  ── Step 1: Find the item by ID ─────────────────────────────────────────
+    req.params.id comes from the URL: PUT /api/items/abc123/report → id = 'abc123'
+      Express creates req.params={ id:"abc123" }
+      Then MongoDB searches _id="abc123" Returns the item.
+        Why findById()? -- Because every item has a unique MongoDB ObjectId. */
+    const item = await Item.findById(req.params.id);
+
+    // ── Step 2: Handle item not found ───────────────────────────────────────
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found.',
+      });
+    }
+
+/*  ── Step 3: Duplicate report check ──────────────────────────────────────
+    req.user.id  → The ID of the currently logged-in user (from JWT via protect middleware)
+    
+    Step 1 : Suppose your database contains:
+        item.reports = [ ObjectId("user1"), ObjectId("user2"), ObjectId("user3") ];
+    Step 2 : item.reports.map((id) => id.toString())
+        map() goes through every element of the array one by one and converted object to string(ObjectId("user1") to "user1").
+        After map(), the array becomes [ "user1", "user2", "user3" ]
+    Step 3 : .includes() checks if the array contains this value.
+        Now suppose the currently logged-in user is : req.user.id = "user2";
+          Then this runs .includes(req.user.id.toString()) , which becomes .includes("user2")    
+        -> it check "Is 'user2' present in this array?" 
+        the ans is yes , so it return true 
+            so, const alreadyReported = true;     */
+    const alreadyReported = item.reports
+      .map((id) => id.toString())       // Convert each ObjectId → string
+      .includes(req.user.id.toString()); // Check if current user's ID is in the array
+  
+    if (alreadyReported) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already reported this item.',
+      });
+    }
+
+/*  ── Step 4: Add the reporter's ID to the reports array ──────────────────
+    We push the current user's ObjectId into the reports array.
+    This user is now recorded as having reported this item. */
+    item.reports.push(req.user.id);
+
+/*  ── Step 5: Auto-Hide Logic (Community Threshold) ───────────────────────
+    After pushing the new report, check if we've hit the threshold of 5.
+    If 5 or more unique users have reported this item, automatically hide it.
+    
+    Why >= 5 instead of === 5?
+      - Safety net: if reports somehow reaches 6, 7, etc. (edge case),
+        we still want it to be hidden. >= is more robust than ===.
+    
+    What happens when status changes to 'hidden'?
+      - Our getItems controller has `filter = { status: 'available' }`.
+      - Since this item's status is now 'hidden', it will NO LONGER appear
+        in any public search or browse results. It effectively vanishes from
+        the marketplace until an admin reviews it. */
+    let wasAutoHidden = false; // Track this for the response message
+
+    if (item.reports.length >= 5) {
+      item.status = 'hidden';
+      wasAutoHidden = true;
+    }
+
+    // ── Step 6: Save the updated item to MongoDB ────────────────────────────
+    await item.save();
+
+    // ── Step 7: Return the response ─────────────────────────────────────────
+    res.status(200).json({
+      success: true,
+      message: wasAutoHidden
+        ? 'Report received. This item has been automatically hidden due to multiple reports and is now under review.'
+        : 'Report received. Thank you for helping keep the marketplace safe.',
+      totalReports: item.reports.length,
+      itemStatus: item.status,
+    });
+
+  } 
+  catch (error) {
+    console.error(`Report Item Error: ${error.message}`);
+
+    // Handle invalid MongoDB ObjectId format in the URL
+    // e.g., /api/items/NOT_A_VALID_ID/report
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found. Invalid ID format.',
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error while reporting the item. Please try again.',
+    });
+  }
+};
+
+
+module.exports = { createItem, getItems, reportItem };
