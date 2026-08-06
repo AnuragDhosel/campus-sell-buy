@@ -74,8 +74,9 @@ dotenv.config();
 
 
 // ─── Route Imports ───────────────────────────────────────────────────────────
-const authRoutes  = require('./routes/auth');
-const itemsRoutes = require('./routes/items'); // Day 3: Item listing routes
+const authRoutes       = require('./routes/auth');
+const itemsRoutes      = require('./routes/items');       // Day 3: Item listing routes
+const handshakeRoutes  = require('./routes/handshakes');   // Day 5: Contact request system
 
 // ─── Middleware Imports , check authentication ────────────────────────────────
 const { protect } = require('./middleware/authMiddleware');
@@ -125,6 +126,9 @@ app.use('/api/auth', authRoutes);
 
 // Items Routes: Create listing, browse listings (mixed public/private)
 app.use('/api/items', itemsRoutes);
+
+// Handshake Routes: Contact requests, notifications, approve/decline (all private)
+app.use('/api/handshakes', handshakeRoutes);
 
 // ─── Protected Test Route ─────────────────────────────────────────────────────
 // PURPOSE: Verify that the protect middleware works end-to-end.

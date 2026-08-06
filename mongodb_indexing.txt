@@ -1,0 +1,613 @@
+==========================
+MongoDB Indexing
+==========================
+
+What is an Index?
+-----------------
+An index is a separate data structure that MongoDB creates to help find documents quickly.
+
+It is similar to the index at the end of a book.
+
+Without an index, MongoDB has to check every document one by one.
+With an index, MongoDB can directly locate the required document.
+
+------------------------------------------------------------
+Normal Array Indexing
+------------------------------------------------------------
+
+In a normal array
+
+arr[0]
+arr[1]
+arr[2]
+
+The index directly represents the position of an element inside the array.
+MongoDB indexes DO NOT work like this.
+MongoDB indexes are separate data structures used for fast searching.
+
+============================================================
+Book Analogy
+============================================================
+
+Suppose you have a Java book with 1000 pages.
+You want to find "Binary Search"
+
+------------------------------------------------------------
+Without Index
+------------------------------------------------------------
+
+You start reading
+
+Page 1
+  ↓
+Page 2
+  ↓
+Page 3
+  ↓
+...
+...
+  ↓
+Page 700
+  ↓
+Found
+
+You checked almost every page.
+This is called a Full Scan
+because every page is checked until the required topic is found.
+
+------------------------------------------------------------
+With Index
+------------------------------------------------------------
+
+At the end of the book there is an index.
+
+Binary Search → Page 700
+Recursion      → Page 210
+Graph          → Page 520
+
+Now you simply
+
+Open Index
+     ↓
+Binary Search
+     ↓
+Page 700
+
+Done.
+
+You never checked the other pages.
+This is exactly how MongoDB indexes work.
+
+============================================================
+MongoDB Example
+============================================================
+
+Suppose your Handshake collection contains
+
+[
+    { buyerId:"A", itemId:"L1" },
+    { buyerId:"B", itemId:"L2" },
+    { buyerId:"C", itemId:"L3" },
+    { buyerId:"D", itemId:"L4" },
+    { buyerId:"E", itemId:"L5" }
+]
+
+Now suppose your query is
+
+Handshake.findOne({
+    buyerId:"D",
+    itemId:"L4"
+})
+
+============================================================
+Without Index
+============================================================
+
+MongoDB starts checking every document one by one.
+
+MongoDB checks each document one by one.
+
+Document 1  → (A, L1)  ❌ Not Match
+      ↓
+Document 2  → (B, L2)  ❌ Not Match
+      ↓
+Document 3  → (C, L3)  ❌ Not Match
+      ↓
+Document 4  → (D, L4)  ✅ Match Found
+
+MongoDB stops here and returns Document 4.
+
+This process is called a Collection Scan
+because MongoDB scans documents one by one until it finds a matching document.
+For large collections containing millions of documents, this becomes slow.
+
+============================================================
+With Index
+============================================================
+
+Create an index
+
+HandshakeSchema.index({
+    buyerId:1,
+    itemId:1
+});
+
+Using the above code, MongoDB creates a separate data structure internally.
+The index may look conceptually like this
+
+INDEX
+
+Buyer + Item             Points To
+
+(A,L1)  -------------> Document 1
+(B,L2)  -------------> Document 2
+(C,L3)  -------------> Document 3
+(D,L4)  -------------> Document 4
+(E,L5)  -------------> Document 5
+
+Notice that the index stores only
+
+• buyerId
+• itemId
+• Pointer (address/reference) to the document
+
+The index DOES NOT store the complete document.
+
+============================================================
+Same Query Again
+============================================================
+
+Handshake.findOne({
+    buyerId:"D",
+    itemId:"L4"
+});
+
+Now MongoDB first searches inside the index.
+
+(A,L1) → No
+          ↓
+(B,L2) → No
+          ↓
+(C,L3) → No
+          ↓
+(D,L4) → Yes
+
+Match Found
+
+MongoDB now reads
+
+(D,L4) → Pointer → Document 4
+
+Using this pointer, MongoDB jumps directly to Document 4 and returns the complete document.
+Instead of scanning every document, MongoDB quickly locates the required document using the index.
+
+============================================================
+Understanding This Code
+============================================================
+
+HandshakeSchema.index({
+    buyerId:1,
+    itemId:1
+});
+
+Important:
+
+The value 1 is NOT an index number.
+
+It does NOT mean : Index 1 , Index 2
+Instead, 
+    buyerId:1 => means Create an ascending index on buyerId.
+
+Similarly,
+    buyerId:-1 => means Create a descending index on buyerId.
+
+So,
+    { buyerId:1 } => means Create an ascending index on buyerId.
+
+============================================================
+Why Indexes Improve Performance
+============================================================
+
+Without Index
+
+Query
+    ↓
+MongoDB scans every document
+    ↓
+Finds the matching document
+    ↓
+Returns the result
+
+Time increases as the collection grows.
+
+------------------------------------------------------------
+
+With Index
+
+Query
+    ↓
+MongoDB searches the index
+    ↓
+Gets the document pointer
+    ↓
+Jumps directly to the document
+    ↓
+Returns the result
+
+Much faster, especially for large collections.
+
+============================================================
+Key Points to Remember
+============================================================
+
+1. MongoDB indexes are NOT array indexes.
+2. An index is a separate data structure.
+3. The index stores only indexed fields and document pointers.
+4. Without an index, MongoDB performs a Collection Scan.
+5. With an index, MongoDB searches the index first, then jumps directly to the matching document.
+6. The value 1 means ascending order.
+7. The value -1 means descending order.
+8. Indexes make read operations much faster but slightly slow down insert, update, and delete operations because the index also needs to be updated.
+
+
+
+
+===========================================================================================================
+===========================================================================================================
+Additional Notes: MongoDB Indexing
+===========================================================================================================
+===========================================================================================================
+
+
+1. Why Do We Need Indexes?
+--------------------------
+
+Without Index
+- MongoDB scans every document.
+- Query becomes slower as the collection grows.
+
+With Index
+- MongoDB searches the index.
+- Jumps directly to the required document.
+- Much faster.
+
+==================================================
+2. Time Complexity
+==================================================
+
+Without Index
+
+Collection Scan
+
+Time Complexity: O(n)
+
+n = Total number of documents
+
+With Index
+
+Index Search
+
+Time Complexity: Approximately O(log n)
+
+Note:
+MongoDB uses B-Tree based indexes (not Hash Tables for normal indexes).
+
+==================================================
+3. What Happens During Insert?
+==================================================
+
+Suppose you insert
+
+{
+    buyerId:"F",
+    itemId:"L6"
+}
+
+MongoDB performs two operations
+
+1. Stores the document.
+2. Updates the index.
+
+New Index
+
+(A,L1)
+(B,L2)
+(C,L3)
+(D,L4)
+(E,L5)
+(F,L6)
+
+Therefore, every insert operation has a small extra cost because MongoDB must also maintain the index.
+
+==================================================
+4. What Happens During Update?
+==================================================
+
+Suppose
+
+buyerId = D
+
+becomes
+
+buyerId = X
+
+MongoDB performs
+
+1. Removes the old index entry.
+2. Creates a new index entry.
+
+Therefore, update operations are slightly slower when indexes exist.
+
+==================================================
+5. What Happens During Delete?
+==================================================
+
+MongoDB performs
+
+1. Deletes the document.
+2. Removes the corresponding index entry.
+
+Deleting a document also requires updating the index.
+
+==================================================
+6. Advantages of Indexes
+==================================================
+
+• Faster searching
+• Faster filtering
+• Faster sorting
+• Better query performance
+• Better performance on large collections
+
+==================================================
+7. Disadvantages of Indexes
+==================================================
+
+Indexes are not free.
+
+They require
+
+• Extra storage space
+• Extra RAM
+• Extra CPU during Insert, Update and Delete operations
+
+Therefore, do not create indexes on every field.
+
+==================================================
+8. Which Fields Should Be Indexed?
+==================================================
+
+Index fields that are searched frequently.
+
+Example
+
+User.findOne({
+    email:"abc@gmail.com"
+});
+
+Index
+
+email
+
+--------------------------------------------------
+
+Index fields that are filtered frequently.
+
+Example
+
+category
+
+--------------------------------------------------
+
+Index fields that are sorted frequently.
+
+Example
+
+createdAt
+
+--------------------------------------------------
+
+Index fields used during login.
+
+Examples
+
+email
+username
+phone
+
+--------------------------------------------------
+
+Index relationship fields.
+
+Examples
+
+sellerId
+buyerId
+itemId
+
+==================================================
+9. Which Fields Should NOT Be Indexed?
+==================================================
+
+Avoid indexing fields that
+
+• Change frequently.
+• Are rarely searched.
+• Have very few unique values.
+
+Example
+
+gender
+
+Male
+Female
+
+Such fields usually do not benefit much from indexing.
+
+==================================================
+10. Compound Index
+==================================================
+
+Example
+
+HandshakeSchema.index({
+    buyerId:1,
+    itemId:1
+});
+
+This is called a Compound Index because multiple fields are indexed together.
+
+==================================================
+11. Order of Fields Matters
+==================================================
+
+Given
+
+HandshakeSchema.index({
+    buyerId:1,
+    itemId:1
+});
+
+MongoDB can efficiently use this index for
+
+✓ buyerId
+
+find({
+    buyerId:"A"
+});
+
+--------------------------------------------------
+
+✓ buyerId + itemId
+
+find({
+    buyerId:"A",
+    itemId:"L2"
+});
+
+--------------------------------------------------
+
+But
+
+find({
+    itemId:"L2"
+});
+
+may not efficiently use this index because buyerId is the first indexed field.
+
+This rule is called the
+
+Leftmost Prefix Rule (Prefix Rule)
+
+==================================================
+12. Checking Whether MongoDB Uses an Index
+==================================================
+
+Use
+
+db.handshakes.find({
+    buyerId:"D"
+}).explain("executionStats")
+
+If you see
+
+COLLSCAN
+
+MongoDB performed a Collection Scan.
+No index was used.
+
+--------------------------------------------------
+
+If you see
+
+IXSCAN
+
+MongoDB used an Index Scan.
+
+==================================================
+13. Types of MongoDB Indexes
+==================================================
+
+1. Single Field Index
+2. Compound Index
+3. Unique Index
+4. Text Index
+5. Multikey Index (Array Fields)
+6. Hashed Index
+7. TTL (Time To Live) Index
+8. Geospatial Index
+9. Wildcard Index
+
+==================================================
+14. Real Project Examples
+==================================================
+
+Campus Buy & Sell Project
+
+User Collection
+
+email
+
+Reason:
+Users log in using email.
+
+--------------------------------------------------
+
+Item Collection
+
+seller
+
+Reason:
+Fetch all items uploaded by a seller.
+
+--------------------------------------------------
+
+Item Collection
+
+category
+
+Reason:
+Users filter products by category.
+
+--------------------------------------------------
+
+Item Collection
+
+status
+
+Reason:
+Users frequently search for available items.
+
+--------------------------------------------------
+
+Handshake Collection
+
+buyerId
+itemId
+
+Reason:
+Used together while searching for a particular handshake.
+
+==================================================
+Important Points to Remember
+==================================================
+
+1. Indexes improve read performance.
+
+2. Indexes slightly slow down Insert, Update and Delete operations.
+
+3. Every index consumes additional storage.
+
+4. Index only the fields that are frequently searched, filtered or sorted.
+
+5. Compound indexes are useful when multiple fields are queried together.
+
+6. The order of fields in a compound index is important (Leftmost Prefix Rule).
+
+7. Use explain("executionStats") to verify whether MongoDB is using an index.
+
+8. Seeing COLLSCAN means no index was used.
+
+9. Seeing IXSCAN means MongoDB is using an index.
+
+10. Proper indexing is one of the biggest factors affecting MongoDB query performance.
