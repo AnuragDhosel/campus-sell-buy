@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Heart, MapPin, Package } from 'lucide-react';
 
 const conditionStyles = {
@@ -9,6 +10,7 @@ const conditionStyles = {
 };
 
 const ProductCard = ({ item }) => {
+  const navigate = useNavigate();
   const [wishlisted, setWishlisted] = useState(false);
 
   const hasImage = item.images && item.images.length > 0 && item.images[0].url;
@@ -22,6 +24,11 @@ const ProductCard = ({ item }) => {
     <div
       className="saas-card overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1"
       style={{ transform: undefined }}
+      onClick={() => navigate(`/item/${item._id}`)}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/item/${item._id}`); }}
+      aria-label={`View ${item.title}`}
     >
       {/* Image Container */}
       <div className="relative aspect-[4/3] overflow-hidden bg-[#F8FAFC]">

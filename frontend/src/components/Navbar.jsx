@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { ShoppingBag, Plus, Heart, Bell, User, Menu, X, LogOut } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ShoppingBag, Plus, Heart, Bell, User, Menu, X, LogOut, LayoutList } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
+import api from '../utils/api';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   const mobileMenuRef = useRef(null);
 
   // Close mobile menu on outside click
@@ -34,7 +39,7 @@ const Navbar = () => {
   }, [mobileMenuOpen]);
 
   const handleSellItem = () => {
-    console.log('Sell Item clicked');
+    navigate('/sell');
   };
 
   const handleWishlist = () => {
@@ -42,8 +47,22 @@ const Navbar = () => {
   };
 
   const handleNotifications = () => {
-    console.log('Notifications clicked');
+    navigate('/notifications');
   };
+
+  // Fetch notification count
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const response = await api.get('/api/handshakes/my-notifications');
+        const data = response.data?.data || [];
+        setNotificationCount(data.length);
+      } catch {
+        // Silently fail — badge just won't show
+      }
+    };
+    fetchCount();
+  }, [location.pathname]); // Re-fetch when page changes
 
   const handleLogout = () => {
     setMobileMenuOpen(false);
@@ -81,6 +100,18 @@ const Navbar = () => {
         {/* Desktop Right Section */}
         <div className="hidden sm:flex items-center gap-3">
           <button
+            onClick={() => navigate('/my-listings')}
+            className={`relative p-2 rounded-lg transition ${
+              location.pathname === '/my-listings'
+                ? 'bg-[#2F6B4F]/5 text-[#2F6B4F]'
+                : 'hover:bg-gray-50 text-[#64748B] hover:text-[#2F6B4F]'
+            }`}
+            title="My Listings"
+          >
+            <LayoutList className="w-5 h-5" />
+          </button>
+
+          <button
             className="saas-button-accent flex items-center gap-2"
             onClick={handleSellItem}
           >
@@ -96,10 +127,20 @@ const Navbar = () => {
           </button>
 
           <button
-            className="relative p-2 rounded-lg hover:bg-gray-50 transition"
+            className={`relative p-2 rounded-lg transition ${
+              location.pathname === '/notifications'
+                ? 'bg-[#2F6B4F]/5 text-[#2F6B4F]'
+                : 'hover:bg-gray-50 text-[#64748B] hover:text-[#2F6B4F]'
+            }`}
             onClick={handleNotifications}
+            title="Notifications"
           >
-            <Bell className="w-5 h-5 text-[#64748B] hover:text-[#2F6B4F] transition" />
+            <Bell className="w-5 h-5" />
+            {notificationCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#D97757] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {notificationCount > 9 ? '9+' : notificationCount}
+              </span>
+            )}
           </button>
 
           <div
@@ -161,6 +202,17 @@ const Navbar = () => {
             <button
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#1E293B] hover:bg-[#F8FAFC] transition text-left"
               onClick={() => {
+                navigate('/my-listings');
+                setMobileMenuOpen(false);
+              }}
+            >
+              <LayoutList className="w-5 h-5 text-[#64748B]" />
+              <span className="font-medium">My Listings</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#1E293B] hover:bg-[#F8FAFC] transition text-left"
+              onClick={() => {
                 handleWishlist();
                 setMobileMenuOpen(false);
               }}
@@ -176,7 +228,14 @@ const Navbar = () => {
                 setMobileMenuOpen(false);
               }}
             >
-              <Bell className="w-5 h-5 text-[#64748B]" />
+              <div className="relative">
+                <Bell className="w-5 h-5 text-[#64748B]" />
+                {notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#D97757] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </span>
+                )}
+              </div>
               <span className="font-medium">Notifications</span>
             </button>
 

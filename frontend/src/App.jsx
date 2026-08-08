@@ -11,6 +11,10 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Marketplace from './pages/Marketplace';
+import SellItem from './pages/SellItem';
+import MyListings from './pages/MyListings';
+import ProductDetails from './pages/ProductDetails';
+import Notifications from './pages/Notifications';
 
 function App() {
   return (
@@ -46,7 +50,10 @@ function App() {
         {/* Protected Routes (Only accessible if logged in) */}
         <Route element={<ProtectedRoute />}>
           <Route path="/home" element={<Marketplace />} />
-          {/* Future protected routes will go here */}
+          <Route path="/sell" element={<SellItem />} />
+          <Route path="/my-listings" element={<MyListings />} />
+          <Route path="/item/:id" element={<ProductDetails />} />
+          <Route path="/notifications" element={<Notifications />} />
         </Route>
 
         {/* Redirect root to /landing by default. 
