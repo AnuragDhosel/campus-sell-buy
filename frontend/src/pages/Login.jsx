@@ -75,9 +75,12 @@ const Login = () => {
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="block text-sm font-medium text-[#1E293B]">Password</label>
-                <span className="text-xs text-[#2F6B4F] font-medium cursor-pointer hover:text-[#265740]">
+                <Link 
+                  to="/forgot-password" 
+                  className="text-xs text-[#2F6B4F] font-medium cursor-pointer hover:text-[#265740] hover:underline"
+                >
                   Forgot Password?
-                </span>
+                </Link>
               </div>
               <div className="relative">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">

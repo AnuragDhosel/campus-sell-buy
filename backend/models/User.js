@@ -26,7 +26,10 @@ const UserSchema = new mongoose.Schema(
       unique: true,       // Creates a unique index in MongoDB
       lowercase: true,    // Normalizes email to lowercase before saving
       trim: true,
-      // Basic email format validation using a regex
+/* Basic email format validation using a regex
+      It says: The email must follow a particular pattern.
+      For example: anurag@gmail.com ✅ , john.doe@gmail.com ✅ , abc123@yahoo.in ✅
+      Something like :  anurag@gma❌ , anurag.com ❌ , @gmail.com ❌ */ 
       match: [
         /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
         'Please provide a valid email address',
@@ -52,6 +55,32 @@ const UserSchema = new mongoose.Schema(
         message: 'Role must be either "user" or "admin"',
       },
       default: 'user',
+    },
+
+/* ── Password Reset ────────────────────────────────────────────────────────
+  resetPasswordToken  → WHO has the reset permission?
+  resetPasswordExpire → WHEN does that permission expire?
+    - These two fields are used for Forgot Password.
+
+  Why hash the token?
+    If the database is ever compromised, attackers would only see the hash,
+    not the actual reset token. They cannot reverse a SHA-256 hash to get
+    the original token, so they cannot reset anyone's password.
+
+  select: false ensures these fields are NEVER returned in normal queries.
+  They are only fetched explicitly when needed (e.g., during password reset). */ 
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+
+/* This stores when the reset token expires.
+      For example: Token generated: 10:00 AM
+          Expires: 10:30 AM
+      Database: resetPasswordExpire: 10:30 AM */ 
+    resetPasswordExpire: {
+      type: Date,
+      select: false,
     },
 
     // ── Profile (Optional - for future expansion) ─────────────────────────────

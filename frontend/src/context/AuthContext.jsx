@@ -1,3 +1,25 @@
+/**
+ * @file context/AuthContext.jsx
+ * @description React Context for Bearer JWT authentication.
+ *
+ * Architecture:
+ *   - JWT is stored in localStorage under the key 'token'.
+ *   - On every API request, api.js interceptor reads localStorage
+ *     and attaches: Authorization: Bearer <token>.
+ *   - On app load, initializeAuth() reads localStorage and restores state.
+ *   - logout() removes the token from localStorage and clears React state.
+ *     The calling component (Navbar) is responsible for:
+ *       1. Calling the backend POST /api/auth/logout  (API acknowledgment).
+ *       2. Calling context logout()                   (local cleanup).
+ *       3. Calling navigate('/login')                 (redirect).
+ *
+ * This context does NOT:
+ *   - Use HTTP-only cookies.
+ *   - Use server-side sessions.
+ *   - Use refresh tokens.
+ *   - Handle navigation (no useNavigate — context is outside the Router).
+ */
+
 import React, { createContext, useState, useEffect } from 'react';
 
 // Create the Context
@@ -81,10 +103,28 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(true);
   };
 
-  // Logout function
+  // ── Logout ─────────────────────────────────────────────────────────────────
+  // This function performs the CLIENT-SIDE portion of logout:
+  //   1. localStorage.removeItem('token') — removes the JWT from the browser.
+  //   2. localStorage.removeItem('user')  — removes cached user data.
+  //   3. Clears all React state (token, user, isAuthenticated).
+  //
+  // IMPORTANT: This function does NOT:
+  //   - Call the backend logout endpoint (the calling component does that).
+  //   - Navigate the user (the calling component does that via useNavigate).
+  //
+  // Why is localStorage.removeItem('token') here and not elsewhere?
+  //   localStorage is a browser API. The backend has no access to it.
+  //   Token removal MUST happen on the frontend. This is the correct place.
+  //
+  // Why not navigate here?
+  //   AuthContext wraps the entire <App />, which lives inside <BrowserRouter>.
+  //   useNavigate() can only be called inside a component that is a CHILD of
+  //   <BrowserRouter>. Since AuthProvider wraps the app, it cannot use
+  //   useNavigate. Navigation is delegated to Navbar (which is inside the Router).
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('token'); // ← JWT removed from browser storage here
+    localStorage.removeItem('user');  // ← Cached user data cleared here
     setToken(null);
     setUser(null);
     setIsAuthenticated(false);

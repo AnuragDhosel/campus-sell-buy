@@ -64,9 +64,46 @@ const Navbar = () => {
     fetchCount();
   }, [location.pathname]); // Re-fetch when page changes
 
-  const handleLogout = () => {
+  // ── Logout ─────────────────────────────────────────────────────────────────
+  // Full logout flow:
+  //   1. Call the backend POST /api/auth/logout  → backend acknowledges the logout.
+  //   2. Remove the JWT from localStorage        → done inside context logout().
+  //   3. Clear the authenticated user state      → done inside context logout().
+  //   4. Redirect to /login                      → navigate() here.
+  //
+  // Why call the backend at all if JWT is stateless?
+  //   The backend cannot revoke a stateless JWT, but calling the endpoint is good
+  //   practice: it provides a clean API contract, server-side logging, and
+  //   extensibility if token revocation is ever added (e.g., Redis blacklist).
+  //
+  // Why not put navigate() inside AuthContext?
+  //   AuthContext is a React Context provider — it does not have access to
+  //   React Router's useNavigate hook outside a Router subtree. Navigation
+  //   is the responsibility of the component (Navbar), not the context.
+  //
+  // Graceful degradation:
+  //   Even if the backend request fails (network error, expired token), we still
+  //   complete the local logout (remove token, clear state, redirect). The user
+  //   should never be stuck in a "half-logged-out" state due to a backend failure.
+  const handleLogout = async () => {
     setMobileMenuOpen(false);
+
+    try {
+      // Step 1: Notify the backend about the logout.
+      // The Authorization header is automatically attached by api.js interceptor.
+      await api.post('/api/auth/logout');
+    } catch (error) {
+      // Backend call failed (network issue, expired token, etc.).
+      // Log the error but continue with local logout — do not block the user.
+      console.error('Backend logout request failed:', error.message);
+    }
+
+    // Step 2 & 3: Remove JWT from localStorage and clear AuthContext state.
+    // localStorage.removeItem('token') is called inside logout() in AuthContext.
     logout();
+
+    // Step 4: Redirect the user to the login page.
+    navigate('/login');
   };
 
   const getUserInitial = () => {
