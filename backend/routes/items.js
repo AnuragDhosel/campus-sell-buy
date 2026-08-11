@@ -43,7 +43,7 @@
 const express = require('express');  // Import Express to create a router
 const { protect } = require('../middleware/authMiddleware'); // Import the protect middleware to secure routes
 const upload = require('../middleware/upload'); // Import the Multer upload middleware for handling file uploads
-const { createItem, getItems, reportItem } = require('../controllers/itemController'); // Import all controller functions
+const { createItem, getItems, getItemById, reportItem } = require('../controllers/itemController'); // Import all controller functions
  
 
 const router = express.Router();
@@ -126,6 +126,12 @@ Behavior:
   - Results are sorted newest-first (createdAt: -1)
   - hostelName and roomNumber are NEVER returned (select: false in schema) */
 router.get('/', getItems);
+
+
+/* ── GET /api/items/:id ────────────────────────────────────────────────────────
+Fetch a single item by its MongoDB ObjectId.
+Public: no token required — anyone can view an item's detail page. */
+router.get('/:id', getItemById);
 
 
 /* ── PUT /api/items/:id/report ─────────────────────────────────────────────────

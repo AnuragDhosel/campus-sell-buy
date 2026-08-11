@@ -592,6 +592,50 @@ const getItems = async (req, res) => {
 };
 
 
+// ─── Controller: Get Item By ID ──────────────────────────────────────────────
+
+/**
+ * @controller getItemById
+ * @route   GET /api/items/:id
+ * @access  Public (no token required)
+ * @desc    Returns a single marketplace item by its MongoDB ObjectId.
+ *          Populates the seller field with name and email (no password).
+ *          hostelName and roomNumber are excluded automatically (select: false in schema).
+ */
+const getItemById = async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id)
+      .populate('seller', 'name email');
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found.',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: item,
+    });
+  } catch (error) {
+    console.error(`Get Item By ID Error: ${error.message}`);
+
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found. Invalid ID format.',
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching the item. Please try again.',
+    });
+  }
+};
+
+
 // ─── Controller: Report Item ─────────────────────────────────────────────────
 
 /** 
@@ -724,4 +768,4 @@ const reportItem = async (req, res) => {
 };
 
 
-module.exports = { createItem, getItems, reportItem };
+module.exports = { createItem, getItems, getItemById, reportItem };
