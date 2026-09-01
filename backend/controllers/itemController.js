@@ -598,7 +598,7 @@ const getItemById = async (req, res) => {
 
     // Select private fields so we can return them ONLY if the requester is the item's seller
     const item = await Item.findById(req.params.id)
-      .select('+roomNumber +sellerPhoneNumber')
+      .select('+hostelName +roomNumber +sellerPhoneNumber')
       .populate('seller', 'name email');
 
     if (!item) {
@@ -614,6 +614,7 @@ const getItemById = async (req, res) => {
 
     // If requester is NOT the item owner/seller, purge private fields
     if (!isOwner) {
+      delete itemObj.hostelName;
       delete itemObj.roomNumber;
       delete itemObj.sellerPhoneNumber;
     }

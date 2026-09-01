@@ -109,9 +109,9 @@ const MyRequests = () => {
               const item = request.itemId || {};
               const image = item.images?.[0]?.url;
               const sellerName = request.sellerId?.name || item.sellerName;
-              const phone = item.sellerPhoneNumber || item.phoneNumber;
-              const room = item.roomNumber;
-              const hostel = item.hostelName;
+              const phone = request.contact?.phoneNumber || request.contact?.sellerPhoneNumber || item.sellerPhoneNumber || item.phoneNumber;
+              const room = request.contact?.roomNumber || item.roomNumber;
+              const hostel = request.contact?.hostelName || item.hostelName;
 
               return (
                 <article

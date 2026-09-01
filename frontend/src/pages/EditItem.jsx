@@ -310,11 +310,11 @@ const EditItem = () => {
                   <h2 className="text-lg font-semibold text-[#1E293B]">Location & Contact Details</h2>
                 </div>
                 <p className="text-[#64748B] text-xs mb-4">
-                  College & Hostel names are <span className="font-semibold text-[#2F6B4F]">Public</span>. Room number & Phone number are <span className="font-semibold text-[#D97757]">Private</span> (shared only with approved buyers).
+                  College name is <span className="font-semibold text-[#2F6B4F]">Public</span>. Room number & Phone number are <span className="font-semibold text-[#D97757]">Private</span> (shared only with approved buyers).
                 </p>
 
                 <div className="space-y-4">
-                  {/* College Name & Hostel Name Row (PUBLIC) */}
+                  {/* College Name & Hostel Name Row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* College Name */}
                     <div id="field-collegeName">
@@ -344,14 +344,9 @@ const EditItem = () => {
 
                     {/* Hostel Name */}
                     <div id="field-hostelName">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label htmlFor="input-hostelName" className="text-sm font-medium text-[#1E293B]">
-                          Hostel Name <span className="text-[#D97757]">*</span>
-                        </label>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#2F6B4F]/10 text-[#2F6B4F] px-2 py-0.5 rounded-full">
-                          <Globe className="w-2.5 h-2.5" /> Public
-                        </span>
-                      </div>
+                      <label htmlFor="input-hostelName" className="block text-sm font-medium text-[#1E293B] mb-1.5">
+                        Hostel Name <span className="text-[#D97757]">*</span>
+                      </label>
                       <input
                         id="input-hostelName"
                         type="text"

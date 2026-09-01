@@ -622,7 +622,7 @@ const getHandshakeById = async (req, res) => {
     }
 
     // Fetch associated item with private fields explicitly selected
-    const item = await Item.findById(handshake.itemId).select('+roomNumber +sellerPhoneNumber');
+    const item = await Item.findById(handshake.itemId).select('+hostelName +roomNumber +sellerPhoneNumber');
 
     const responseItem = {
       _id: item?._id || handshake.itemId,
@@ -632,7 +632,6 @@ const getHandshakeById = async (req, res) => {
       description: item?.description || '',
       condition: item?.condition || '',
       collegeName: item?.collegeName || '',
-      hostelName: item?.hostelName || '', // Hostel Name is ALWAYS public
       images: item?.images || [],
     };
 
@@ -640,9 +639,13 @@ const getHandshakeById = async (req, res) => {
     const roomGranted = isApproved && isBuyer && Boolean(handshake.sharedDetails?.shareRoomNumber || handshake.sharedDetails?.shareHostel);
     const phoneGranted = isApproved && isBuyer && Boolean(handshake.sharedDetails?.sharePhoneNumber || handshake.sharedDetails?.shareMobile);
 
-    const contactObj = {
-      hostelName: item?.hostelName || '',
-    };
+    const contactObj = {};
+
+    // Reveal Hostel Name only when request is approved (regardless of room or phone permissions)
+    if (isApproved && (isBuyer || isSeller) && item?.hostelName) {
+      contactObj.hostelName = item.hostelName;
+      responseItem.hostelName = item.hostelName;
+    }
 
     // FEATURE 6, 7, 8: Private data is ONLY returned when status === 'approved' AND permission is true AND requester is buyer
     if (roomGranted && item?.roomNumber) {
@@ -710,7 +713,7 @@ const getMyRequests = async (req, res) => {
 
     const formattedRequests = await Promise.all(
       handshakes.map(async (handshake) => {
-        const item = await Item.findById(handshake.itemId).select('+roomNumber +sellerPhoneNumber');
+        const item = await Item.findById(handshake.itemId).select('+hostelName +roomNumber +sellerPhoneNumber');
 
         const responseItem = {
           _id: item?._id || handshake.itemId,
@@ -720,7 +723,6 @@ const getMyRequests = async (req, res) => {
           description: item?.description || '',
           condition: item?.condition || '',
           collegeName: item?.collegeName || '',
-          hostelName: item?.hostelName || '', // Hostel Name is ALWAYS public
           images: item?.images || [],
         };
 
@@ -728,9 +730,13 @@ const getMyRequests = async (req, res) => {
         const roomGranted = isApproved && Boolean(handshake.sharedDetails?.shareRoomNumber || handshake.sharedDetails?.shareHostel);
         const phoneGranted = isApproved && Boolean(handshake.sharedDetails?.sharePhoneNumber || handshake.sharedDetails?.shareMobile);
 
-        const contactObj = {
-          hostelName: item?.hostelName || '',
-        };
+        const contactObj = {};
+
+        // Reveal Hostel Name only when approved (regardless of room/phone permission)
+        if (isApproved && item?.hostelName) {
+          contactObj.hostelName = item.hostelName;
+          responseItem.hostelName = item.hostelName;
+        }
 
         if (roomGranted && item?.roomNumber) {
           contactObj.roomNumber = item.roomNumber;

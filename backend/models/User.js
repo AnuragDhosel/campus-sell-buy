@@ -57,39 +57,41 @@ const UserSchema = new mongoose.Schema(
       default: 'user',
     },
 
-/* ── Password Reset ────────────────────────────────────────────────────────
-  resetPasswordToken  → WHO has the reset permission?
-  resetPasswordExpire → WHEN does that permission expire?
-    - These two fields are used for Forgot Password.
+/* ── OTP-Based Password Reset ─────────────────────────────────────────────
+  resetOtp            → bcrypt hash of the 6-digit OTP sent to user's email.
+  resetOtpExpire      → when the OTP expires (10 minutes from generation).
+  resetOtpToken       → bcrypt hash of the short-lived reset token issued
+                        after OTP verification (valid for 15 minutes).
+  resetOtpTokenExpire → when the reset token expires.
 
-  Why hash the token?
-    If the database is ever compromised, attackers would only see the hash,
-    not the actual reset token. They cannot reverse a SHA-256 hash to get
-    the original token, so they cannot reset anyone's password.
+  All fields have select: false so they are NEVER returned in normal queries.
 
-  select: false ensures these fields are NEVER returned in normal queries.
-  They are only fetched explicitly when needed (e.g., during password reset). */ 
-    resetPasswordToken: {
+  Flow:
+    POST /forgot-password → generate OTP → store bcrypt(OTP) in resetOtp
+    POST /verify-otp      → verify OTP   → generate resetToken → store bcrypt(token)
+    POST /reset-password  → verify token → update password → clear all fields
+*/
+    resetOtp: {
       type: String,
       select: false,
     },
 
-/* This stores when the reset token expires.
-      For example: Token generated: 10:00 AM
-          Expires: 10:30 AM
-      Database: resetPasswordExpire: 10:30 AM */ 
-    resetPasswordExpire: {
+    resetOtpExpire: {
       type: Date,
       select: false,
     },
 
-    // ── Profile (Optional - for future expansion) ─────────────────────────────
-    // profilePicture: { type: String, default: '' },
-    // collegeName: { type: String },
-    // mobileNumber: { type: String, select: false }, // hidden by default for privacy
+    resetOtpToken: {
+      type: String,
+      select: false,
+    },
+
+    resetOtpTokenExpire: {
+      type: Date,
+      select: false,
+    },
   },
   {
-    // Automatically adds `createdAt` and `updatedAt` timestamp fields
     timestamps: true,
   }
 );

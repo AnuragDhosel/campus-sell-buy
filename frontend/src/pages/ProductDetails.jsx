@@ -421,9 +421,9 @@ const ProductDetails = () => {
 
     if (contactStatus === 'approved') {
       const sellerName = typeof item?.seller === 'object' ? item?.seller?.name : (sharedInfo?.sellerName || 'Seller');
-      const hostel = item?.hostelName || sharedInfo?.hostelName;
-      const room = sharedInfo?.roomNumber;
-      const phone = sharedInfo?.sellerPhoneNumber || sharedInfo?.phoneNumber;
+      const hostel = sharedInfo?.hostelName || sharedInfo?.contact?.hostelName || sharedInfo?.itemId?.hostelName;
+      const room = sharedInfo?.roomNumber || sharedInfo?.contact?.roomNumber || sharedInfo?.itemId?.roomNumber;
+      const phone = sharedInfo?.sellerPhoneNumber || sharedInfo?.phoneNumber || sharedInfo?.contact?.phoneNumber || sharedInfo?.contact?.sellerPhoneNumber;
 
       return (
         <div className="bg-[#2F6B4F]/5 border border-[#2F6B4F]/20 rounded-xl p-4 space-y-3">

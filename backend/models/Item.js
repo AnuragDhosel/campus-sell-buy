@@ -132,11 +132,12 @@ AND the middleware level (Multer limits in middleware/upload.js). */
       trim: true,
     },
 
-    // PUBLIC: Always visible on public item queries.
+    // PRIVATE: Only revealed after a Handshake is approved.
     hostelName: {
       type: String,
       required: [true, 'Please provide the hostel name for pickup coordination'],
       trim: true,
+      select: false, // Hidden from all public queries by default
     },
 
     // PRIVATE: Only revealed after a Handshake is approved.
