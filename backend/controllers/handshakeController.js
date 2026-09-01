@@ -673,6 +673,7 @@ const getHandshakeById = async (req, res) => {
       },
       contact: contactObj,
       createdAt: handshake.createdAt,
+      updatedAt: handshake.updatedAt,
     };
 
     res.status(200).json({
@@ -762,6 +763,7 @@ const getMyRequests = async (req, res) => {
           },
           contact: contactObj,
           createdAt: handshake.createdAt,
+          updatedAt: handshake.updatedAt,
         };
       })
     );

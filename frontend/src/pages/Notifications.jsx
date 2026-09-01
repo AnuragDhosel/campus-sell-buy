@@ -40,8 +40,12 @@ const Notifications = () => {
         ...buyerRequests.filter((req) => req.status === 'approved' || req.status === 'declined'),
       ];
 
-      // Sort by newest
-      combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Sort by newest activity (updatedAt for responses or createdAt)
+      combined.sort((a, b) => {
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        return timeB - timeA;
+      });
 
       setNotifications(combined);
     } catch (err) {
@@ -124,8 +128,8 @@ const Notifications = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-[#1E293B]">Notifications</h1>
             <p className="text-[#64748B] text-sm mt-0.5">
               {!loading && !error
-                ? `${notifications.length} pending request${notifications.length !== 1 ? 's' : ''}`
-                : 'Contact requests from buyers'}
+                ? `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}`
+                : 'Contact requests and updates'}
             </p>
           </div>
         </div>
@@ -148,8 +152,8 @@ const Notifications = () => {
         ) : notifications.length === 0 ? (
           <EmptyState
             icon={Inbox}
-            title="No pending requests"
-            description="When buyers request contact for your items, notifications will appear here."
+            title="No notifications yet"
+            description="When buyers request contact or sellers respond to your requests, notifications will appear here."
           />
         ) : (
           <div className="space-y-4">

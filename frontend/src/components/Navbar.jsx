@@ -9,34 +9,40 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [badgeCount, setBadgeCount] = useState(0);
   const mobileMenuRef = useRef(null);
+  const profileDropdownRef = useRef(null);
 
-  // Close mobile menu on outside click
+  // Close menus on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
         setMobileMenuOpen(false);
       }
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target)) {
+        setProfileDropdownOpen(false);
+      }
     };
-    if (mobileMenuOpen) {
+    if (mobileMenuOpen || profileDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, profileDropdownOpen]);
 
-  // Close mobile menu on Escape
+  // Close menus on Escape
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         setMobileMenuOpen(false);
+        setProfileDropdownOpen(false);
       }
     };
-    if (mobileMenuOpen) {
+    if (mobileMenuOpen || profileDropdownOpen) {
       document.addEventListener('keydown', handleEscape);
     }
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, profileDropdownOpen]);
 
   const handleSellItem = () => {
     navigate('/sell');
@@ -50,19 +56,60 @@ const Navbar = () => {
     navigate('/notifications');
   };
 
-  // Fetch notification count
+  // Fetch notification badge status for both Seller requests and Buyer responses
   useEffect(() => {
-    const fetchCount = async () => {
+    if (!user) {
+      setBadgeCount(0);
+      return;
+    }
+
+    const storageKey = `cm_last_viewed_notifs_${user.id || user._id}`;
+
+    const fetchNotificationCounts = async () => {
       try {
-        const response = await api.get('/api/handshakes/my-notifications');
-        const data = response.data?.data || [];
-        setNotificationCount(data.length);
+        const [sellerRes, buyerRes] = await Promise.allSettled([
+          api.get('/api/handshakes/my-notifications'),
+          api.get('/api/handshakes/my-requests'),
+        ]);
+
+        const sellerNotifications = sellerRes.status === 'fulfilled' ? (sellerRes.value.data?.data || []) : [];
+        const buyerRequests = buyerRes.status === 'fulfilled' ? (buyerRes.value.data?.data || []) : [];
+
+        // Seller incoming pending requests count
+        const sellerPendingCount = sellerNotifications.filter((n) => n.status === 'pending').length;
+
+        // Buyer responses count (accepted or declined requests)
+        let buyerResponseCount = 0;
+        if (location.pathname === '/notifications') {
+          // If currently on notifications page, mark buyer responses as viewed
+          localStorage.setItem(storageKey, new Date().toISOString());
+        } else {
+          const buyerResponses = buyerRequests.filter(
+            (req) => req.status === 'approved' || req.status === 'declined'
+          );
+          if (buyerResponses.length > 0) {
+            const lastViewed = localStorage.getItem(storageKey);
+            if (!lastViewed) {
+              buyerResponseCount = 1;
+            } else {
+              const lastViewedTime = new Date(lastViewed).getTime();
+              const hasNewResponse = buyerResponses.some((req) => {
+                const reqTime = new Date(req.updatedAt || req.createdAt).getTime();
+                return reqTime > lastViewedTime;
+              });
+              if (hasNewResponse) buyerResponseCount = 1;
+            }
+          }
+        }
+
+        setBadgeCount(sellerPendingCount + buyerResponseCount);
       } catch {
         // Silently fail — badge just won't show
       }
     };
-    fetchCount();
-  }, [location.pathname]); // Re-fetch when page changes
+
+    fetchNotificationCounts();
+  }, [location.pathname, user]);
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   // Full logout flow:
@@ -184,29 +231,101 @@ const Navbar = () => {
             }`}
             onClick={handleNotifications}
             title="Notifications"
+            aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
-            {notificationCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#D97757] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {notificationCount > 9 ? '9+' : notificationCount}
+            {badgeCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#D97757] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm pointer-events-none">
+                {badgeCount > 9 ? '9+' : badgeCount}
               </span>
             )}
           </button>
 
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#84A98C] transition"
-            style={{ backgroundColor: '#2F6B4F' }}
-            onClick={() => navigate('/profile')}
-            title="Profile"
-            role="button"
-            aria-label="View profile"
-          >
-            {getUserInitial() ? (
-              <span className="text-white text-sm font-semibold">
-                {getUserInitial()}
-              </span>
-            ) : (
-              <User className="w-5 h-5 text-white" />
+          {/* Profile Menu Dropdown */}
+          <div className="relative" ref={profileDropdownRef}>
+            <button
+              onClick={() => setProfileDropdownOpen((prev) => !prev)}
+              className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#84A98C] transition"
+              style={{ backgroundColor: '#2F6B4F' }}
+              title="Profile menu"
+              aria-label="Profile menu"
+              aria-expanded={profileDropdownOpen}
+            >
+              {getUserInitial() ? (
+                <span className="text-white text-sm font-semibold">
+                  {getUserInitial()}
+                </span>
+              ) : (
+                <User className="w-5 h-5 text-white" />
+              )}
+            </button>
+
+            {profileDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-[#E2E8F0] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-4 py-2 border-b border-[#E2E8F0]">
+                  <p className="text-sm font-bold text-[#1E293B] truncate">{user?.name || 'User'}</p>
+                  <p className="text-xs text-[#64748B] truncate">{user?.email || ''}</p>
+                </div>
+
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      navigate('/profile');
+                      setProfileDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2F6B4F] transition text-left"
+                  >
+                    <User className="w-4 h-4 text-[#64748B]" />
+                    <span>My Profile</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigate('/my-listings');
+                      setProfileDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2F6B4F] transition text-left font-medium"
+                  >
+                    <LayoutList className="w-4 h-4 text-[#2F6B4F]" />
+                    <span>My Listings</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigate('/my-requests');
+                      setProfileDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2F6B4F] transition text-left"
+                  >
+                    <Inbox className="w-4 h-4 text-[#64748B]" />
+                    <span>My Requests</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigate('/wishlist');
+                      setProfileDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2F6B4F] transition text-left"
+                  >
+                    <Heart className="w-4 h-4 text-[#64748B]" />
+                    <span>Wishlist</span>
+                  </button>
+                </div>
+
+                <div className="border-t border-[#E2E8F0] pt-1 mt-1">
+                  <button
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition text-left font-medium"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -295,9 +414,9 @@ const Navbar = () => {
             >
               <div className="relative">
                 <Bell className="w-5 h-5 text-[#64748B]" />
-                {notificationCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#D97757] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                    {notificationCount > 9 ? '9+' : notificationCount}
+                {badgeCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 bg-[#D97757] text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-sm pointer-events-none">
+                    {badgeCount > 9 ? '9+' : badgeCount}
                   </span>
                 )}
               </div>

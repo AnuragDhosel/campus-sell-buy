@@ -57,15 +57,15 @@ const Profile = () => {
         const userData = profileRes.data?.user || profileRes.data?.data || user;
         setProfile(userData);
 
-        const currentUserId = userData?._id || userData?.id || user?.id;
+        const currentUserId = userData?._id || userData?.id || user?.id || user?._id;
 
         // 2. Fetch Active Listings count
         try {
-          const itemsRes = await api.get('/api/items');
+          const itemsRes = await api.get(`/api/items?seller=${currentUserId}`);
           const allItems = itemsRes.data?.data || [];
           const myItems = allItems.filter((item) => {
             const sellerId =
-              typeof item.seller === 'object' ? item.seller._id : item.seller;
+              typeof item.seller === 'object' ? item.seller?._id : item.seller;
             return String(sellerId) === String(currentUserId);
           });
           setActiveListingsCount(myItems.length);

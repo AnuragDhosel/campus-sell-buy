@@ -23,17 +23,20 @@ const MyListings = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchMyItems = useCallback(async () => {
+    const currentUserId = user?.id || user?._id;
+    if (!currentUserId) return;
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await api.get('/api/items');
+      const response = await api.get(`/api/items?seller=${currentUserId}`);
       const allItems = response.data?.data || [];
 
       const myItems = allItems.filter((item) => {
         const sellerId =
-          typeof item.seller === 'object' ? item.seller._id : item.seller;
-        return String(sellerId) === String(user?.id);
+          typeof item.seller === 'object' ? item.seller?._id : item.seller;
+        return String(sellerId) === String(currentUserId);
       });
 
       setItems(myItems);
@@ -46,13 +49,13 @@ const MyListings = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id || user?._id) {
       fetchMyItems();
     }
-  }, [user?.id, fetchMyItems]);
+  }, [user, fetchMyItems]);
 
   const handleEdit = useCallback(
     (item) => {

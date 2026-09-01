@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapPin, Calendar, Pencil, Trash2, ImageOff } from 'lucide-react';
 
 const STATUS_STYLES = {
@@ -27,12 +28,25 @@ const formatDate = (dateString) => {
 };
 
 const MyListingCard = ({ item, onEdit, onDelete }) => {
+  const navigate = useNavigate();
   const hasImage = item.images && item.images.length > 0 && item.images[0].url;
   const imageCount = item.images?.length || 0;
 
+  const handleCardClick = () => {
+    if (item?._id) {
+      navigate(`/item/${item._id}`);
+    }
+  };
+
   return (
     <article
-      className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.08)] transition-shadow duration-200"
+      onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') handleCardClick();
+      }}
+      tabIndex={0}
+      role="button"
+      className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.08)] hover:border-[#84A98C] transition-all duration-200 cursor-pointer group"
       aria-label={`Listing: ${item.title}`}
     >
       <div className="flex flex-col sm:flex-row">
@@ -42,7 +56,7 @@ const MyListingCard = ({ item, onEdit, onDelete }) => {
             <img
               src={item.images[0].url}
               alt={item.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
             />
           ) : (
@@ -78,7 +92,7 @@ const MyListingCard = ({ item, onEdit, onDelete }) => {
             </div>
 
             {/* Title */}
-            <h3 className="text-[#1E293B] font-semibold text-base line-clamp-1">
+            <h3 className="text-[#1E293B] font-semibold text-base line-clamp-1 group-hover:text-[#2F6B4F] transition-colors">
               {item.title}
             </h3>
 
@@ -107,7 +121,10 @@ const MyListingCard = ({ item, onEdit, onDelete }) => {
           {/* Actions */}
           <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#E2E8F0]">
             <button
-              onClick={() => onEdit?.(item)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.(item);
+              }}
               className="saas-button-secondary text-sm py-2 px-3 gap-1.5"
               aria-label={`Edit ${item.title}`}
             >
@@ -115,7 +132,10 @@ const MyListingCard = ({ item, onEdit, onDelete }) => {
               Edit
             </button>
             <button
-              onClick={() => onDelete?.(item)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete?.(item);
+              }}
               className="inline-flex items-center justify-center text-sm font-medium py-2 px-3 rounded-xl border border-[#E2E8F0] text-[#D97757] hover:bg-[#D97757]/5 hover:border-[#D97757]/30 transition gap-1.5"
               aria-label={`Delete ${item.title}`}
             >
@@ -130,3 +150,4 @@ const MyListingCard = ({ item, onEdit, onDelete }) => {
 };
 
 export default memo(MyListingCard);
+

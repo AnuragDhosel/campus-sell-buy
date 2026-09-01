@@ -479,37 +479,27 @@ The actual image stays in Cloudinary.
 
 const getItems = async (req, res) => {
   try {
-    /* ── Step 1: Extract query parameters ────────────────────────────────────
-    req.query contains the 'key-value pairs' after the ? in the URL.
-    Example: URL : GET /api/items?search=laptop&category=Electronics&collegeName=MITS
-      Express creates :
-              → req.query = { search: 'laptop', category: 'Electronics', collegeName: 'MITS' }
-                If a parameter is not provided, it will be undefined. */
-    const { search, category, collegeName } = req.query;
+    /* ── Step 1: Extract query parameters ──────────────────────────────────── */
+    const { search, category, collegeName, seller, status } = req.query;
 
-    /* ── Step 2: Build the base filter ───────────────────────────────────────
-    CRITICAL: We always start with status: 'available'.
-    This is the DEFAULT safety net — it ensures that reported/hidden/sold items
-    are NEVER returned to the public browsing API.
-    
-    Without this filter, a user could see hidden or flagged items,
-    which would defeat the purpose of our entire moderation system. */
-    const filter = { status: 'available' };
+    /* ── Step 2: Build the filter ──────────────────────────────────────────── */
+    const filter = {};
+    if (status) {
+      filter.status = status;
+    } else if (!seller) {
+      filter.status = 'available';
+    }
 
-    /* ── Step 3: Conditionally add category filter ───────────────────────────
-    If the frontend sends ?category=Books, we add it to the filter.
-    Now filter becomes : { status:"available" , category:"Books" }
-    This is an EXACT match — "Books" won't match "books" or "BOOKS"
-    (unlike $regex). Mongoose will query: { status: 'available', category: 'Books' } */
+    if (seller) {
+      filter.seller = seller;
+    }
+
+    /* ── Step 3: Conditionally add category filter ─────────────────────────── */
     if (category) {
       filter.category = category;
     }
 
-    /* ── Step 4: Conditionally add collegeName filter ─────────────────────────
-    If the frontend sends ?collegeName=MITS, we add it to the filter.
-    Now filter becomes : { status:"available", category:"Books", collegeName:"MITS" }
-    Same logic — an exact match on the college name.
-    This allows students to browse items listed only on their campus. */
+    /* ── Step 4: Conditionally add collegeName filter ───────────────────────── */
     if (collegeName) {
       filter.collegeName = collegeName;
     }
