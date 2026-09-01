@@ -26,8 +26,24 @@ const Notifications = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/api/handshakes/my-notifications');
-      setNotifications(response.data?.data || []);
+      const [sellerRes, buyerRes] = await Promise.allSettled([
+        api.get('/api/handshakes/my-notifications'),
+        api.get('/api/handshakes/my-requests'),
+      ]);
+
+      const sellerNotifications = sellerRes.status === 'fulfilled' ? (sellerRes.value.data?.data || []) : [];
+      const buyerRequests = buyerRes.status === 'fulfilled' ? (buyerRes.value.data?.data || []) : [];
+
+      // Combine seller pending notifications with buyer accepted/declined response notifications
+      const combined = [
+        ...sellerNotifications,
+        ...buyerRequests.filter((req) => req.status === 'approved' || req.status === 'declined'),
+      ];
+
+      // Sort by newest
+      combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      setNotifications(combined);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
       setError(err.response?.data?.message || 'Failed to load notifications.');
@@ -73,7 +89,9 @@ const Notifications = () => {
       await api.put(`/api/handshakes/${selectedNotification._id}/respond`, {
         status: 'approved',
         shareHostel,
+        shareRoomNumber: shareHostel,
         shareMobile,
+        sharePhoneNumber: shareMobile,
       });
       // Remove from list
       setNotifications((prev) => prev.filter((n) => n._id !== selectedNotification._id));

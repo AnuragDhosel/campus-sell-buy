@@ -74,8 +74,8 @@ const SharePermissionModal = ({ isOpen, onClose, onConfirm, isLoading, buyerName
               className="w-5 h-5 accent-[#2F6B4F] mt-0.5"
             />
             <div>
-              <div className="text-sm font-medium text-[#1E293B]">Hostel & Room Details</div>
-              <div className="text-xs text-[#64748B]">Share your hostel name and room number</div>
+              <div className="text-sm font-medium text-[#1E293B]">Room Number</div>
+              <div className="text-xs text-[#64748B]">Share your hostel room number</div>
             </div>
           </label>
 
@@ -93,7 +93,6 @@ const SharePermissionModal = ({ isOpen, onClose, onConfirm, isLoading, buyerName
             <div>
               <div className="text-sm font-medium text-[#1E293B]">Mobile Number</div>
               <div className="text-xs text-[#64748B]">Share your phone number</div>
-              <div className="text-xs text-[#64748B]/60 mt-0.5">(Not available - mobile number not set in profile)</div>
             </div>
           </label>
         </div>

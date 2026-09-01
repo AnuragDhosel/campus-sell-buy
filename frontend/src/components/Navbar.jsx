@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ShoppingBag, Plus, Heart, Bell, User, Menu, X, LogOut, LayoutList } from 'lucide-react';
+import { ShoppingBag, Plus, Heart, Bell, User, Menu, X, LogOut, LayoutList, Inbox } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
 
@@ -43,7 +43,7 @@ const Navbar = () => {
   };
 
   const handleWishlist = () => {
-    console.log('Wishlist clicked');
+    navigate('/wishlist');
   };
 
   const handleNotifications = () => {
@@ -157,6 +157,19 @@ const Navbar = () => {
           </button>
 
           <button
+            onClick={() => navigate('/my-requests')}
+            className={`relative p-2 rounded-lg transition ${
+              location.pathname === '/my-requests'
+                ? 'bg-[#2F6B4F]/5 text-[#2F6B4F]'
+                : 'hover:bg-gray-50 text-[#64748B] hover:text-[#2F6B4F]'
+            }`}
+            title="My Requests"
+            aria-label="My contact requests"
+          >
+            <Inbox className="w-5 h-5" />
+          </button>
+
+          <button
             className="relative p-2 rounded-lg hover:bg-gray-50 transition"
             onClick={handleWishlist}
           >
@@ -181,8 +194,12 @@ const Navbar = () => {
           </button>
 
           <div
-            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#84A98C] transition"
             style={{ backgroundColor: '#2F6B4F' }}
+            onClick={() => navigate('/profile')}
+            title="Profile"
+            role="button"
+            aria-label="View profile"
           >
             {getUserInitial() ? (
               <span className="text-white text-sm font-semibold">
@@ -250,6 +267,17 @@ const Navbar = () => {
             <button
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#1E293B] hover:bg-[#F8FAFC] transition text-left"
               onClick={() => {
+                navigate('/my-requests');
+                setMobileMenuOpen(false);
+              }}
+            >
+              <Inbox className="w-5 h-5 text-[#64748B]" />
+              <span className="font-medium">My Requests</span>
+            </button>
+
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#1E293B] hover:bg-[#F8FAFC] transition text-left"
+              onClick={() => {
                 handleWishlist();
                 setMobileMenuOpen(false);
               }}
@@ -276,7 +304,13 @@ const Navbar = () => {
               <span className="font-medium">Notifications</span>
             </button>
 
-            <div className="flex items-center gap-3 px-3 py-2.5">
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#1E293B] hover:bg-[#F8FAFC] transition text-left"
+              onClick={() => {
+                navigate('/profile');
+                setMobileMenuOpen(false);
+              }}
+            >
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: '#2F6B4F' }}
@@ -292,7 +326,7 @@ const Navbar = () => {
               <span className="font-medium text-[#1E293B]">
                 {user?.name || 'Profile'}
               </span>
-            </div>
+            </button>
 
             <div className="border-t border-[#E2E8F0] my-1" />
 

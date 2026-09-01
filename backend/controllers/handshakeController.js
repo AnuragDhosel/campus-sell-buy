@@ -455,7 +455,7 @@ const respondToHandshake = async (req, res) => {
     seller sends status, shareHostel, shareMobile in the request body by frontend.
       status: 'approved' or 'declined' — the seller's decision.
       shareHostel, shareMobile -> booleans values */
-    const { status, shareHostel, shareMobile } = req.body;
+    const { status, shareHostel, shareMobile, shareRoomNumber, sharePhoneNumber } = req.body;
 
 /* ── Input Validation ─────────────────────────────────────────────────
     !status means Seller didn't send status. Example - {}
@@ -539,8 +539,17 @@ const respondToHandshake = async (req, res) => {
            MongoDB stores -> sharedDetails: { shareHostel: true }
     same for shareMobile  */
     if (status === 'approved') {
-      handshake.sharedDetails.shareHostel = shareHostel === true;
-      handshake.sharedDetails.shareMobile = shareMobile === true;
+      const roomGranted = shareRoomNumber === true || shareHostel === true;
+      const phoneGranted = sharePhoneNumber === true || shareMobile === true;
+      handshake.sharedDetails.shareRoomNumber = roomGranted;
+      handshake.sharedDetails.shareHostel = roomGranted;
+      handshake.sharedDetails.sharePhoneNumber = phoneGranted;
+      handshake.sharedDetails.shareMobile = phoneGranted;
+    } else {
+      handshake.sharedDetails.shareRoomNumber = false;
+      handshake.sharedDetails.shareHostel = false;
+      handshake.sharedDetails.sharePhoneNumber = false;
+      handshake.sharedDetails.shareMobile = false;
     }
 
     // ── Save to MongoDB ──────────────────────────────────────────────────
@@ -550,7 +559,7 @@ const respondToHandshake = async (req, res) => {
     res.status(200).json({
       success: true,
       message: status === 'approved'
-        ? 'Request approved! The buyer can now see your shared details.'
+        ? 'Request approved! Shared details updated.'
         : 'Request declined. No details were shared.',
       data: handshake,
     });
@@ -575,4 +584,201 @@ const respondToHandshake = async (req, res) => {
 };
 
 
-module.exports = { requestContact, getMyNotifications, respondToHandshake };
+// ─── Controller: Get Handshake By ID ─────────────────────────────────────────
+
+/**
+ * @controller getHandshakeById
+ * @route   GET /api/handshakes/:id
+ * @access  Private (JWT required — ONLY buyer or seller involved can view)
+ * @desc    Retrieves a handshake by ID. If approved, reveals private contact fields 
+ *          (roomNumber, sellerPhoneNumber) strictly based on handshake.sharedDetails permissions.
+ */
+const getHandshakeById = async (req, res) => {
+  try {
+    const handshake = await Handshake.findById(req.params.id)
+      .populate('buyerId', 'name email')
+      .populate('sellerId', 'name email');
+
+    if (!handshake) {
+      return res.status(404).json({
+        success: false,
+        message: 'Handshake not found.',
+      });
+    }
+
+    const userId = req.user.id.toString();
+    const buyerIdStr = (handshake.buyerId?._id || handshake.buyerId).toString();
+    const sellerIdStr = (handshake.sellerId?._id || handshake.sellerId).toString();
+
+    const isBuyer = userId === buyerIdStr;
+    const isSeller = userId === sellerIdStr;
+
+    // FEATURE 9 & 10: Requester authorization check
+    if (!isBuyer && !isSeller) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to access this handshake information.',
+      });
+    }
+
+    // Fetch associated item with private fields explicitly selected
+    const item = await Item.findById(handshake.itemId).select('+roomNumber +sellerPhoneNumber');
+
+    const responseItem = {
+      _id: item?._id || handshake.itemId,
+      title: item?.title || '',
+      price: item?.price || 0,
+      category: item?.category || '',
+      description: item?.description || '',
+      condition: item?.condition || '',
+      collegeName: item?.collegeName || '',
+      hostelName: item?.hostelName || '', // Hostel Name is ALWAYS public
+      images: item?.images || [],
+    };
+
+    const isApproved = handshake.status === 'approved';
+    const roomGranted = isApproved && isBuyer && Boolean(handshake.sharedDetails?.shareRoomNumber || handshake.sharedDetails?.shareHostel);
+    const phoneGranted = isApproved && isBuyer && Boolean(handshake.sharedDetails?.sharePhoneNumber || handshake.sharedDetails?.shareMobile);
+
+    const contactObj = {
+      hostelName: item?.hostelName || '',
+    };
+
+    // FEATURE 6, 7, 8: Private data is ONLY returned when status === 'approved' AND permission is true AND requester is buyer
+    if (roomGranted && item?.roomNumber) {
+      contactObj.roomNumber = item.roomNumber;
+      responseItem.roomNumber = item.roomNumber;
+    }
+
+    if (phoneGranted && item?.sellerPhoneNumber) {
+      contactObj.phoneNumber = item.sellerPhoneNumber;
+      contactObj.sellerPhoneNumber = item.sellerPhoneNumber;
+      responseItem.phoneNumber = item.sellerPhoneNumber;
+      responseItem.sellerPhoneNumber = item.sellerPhoneNumber;
+    }
+
+    const responseData = {
+      _id: handshake._id,
+      status: handshake.status,
+      buyerId: handshake.buyerId,
+      sellerId: handshake.sellerId,
+      itemId: responseItem,
+      sharedDetails: handshake.sharedDetails,
+      permissions: {
+        shareRoomNumber: Boolean(handshake.sharedDetails?.shareRoomNumber || handshake.sharedDetails?.shareHostel),
+        sharePhoneNumber: Boolean(handshake.sharedDetails?.sharePhoneNumber || handshake.sharedDetails?.shareMobile),
+      },
+      contact: contactObj,
+      createdAt: handshake.createdAt,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: responseData,
+      handshake: responseData,
+    });
+  } catch (error) {
+    console.error(`Get Handshake By ID Error: ${error.message}`);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Handshake not found. Invalid ID format.',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching handshake.',
+    });
+  }
+};
+
+
+// ─── Controller: Get My Requests (Buyer View) ───────────────────────────────
+
+/**
+ * @controller getMyRequests
+ * @route   GET /api/handshakes/my-requests
+ * @access  Private (JWT required — buyers check their sent requests)
+ * @desc    Returns all contact requests sent by the logged-in buyer, with 
+ *          approved private contact fields included ONLY if permitted.
+ */
+const getMyRequests = async (req, res) => {
+  try {
+    const handshakes = await Handshake.find({ buyerId: req.user.id })
+      .populate('sellerId', 'name email')
+      .sort({ createdAt: -1 });
+
+    const formattedRequests = await Promise.all(
+      handshakes.map(async (handshake) => {
+        const item = await Item.findById(handshake.itemId).select('+roomNumber +sellerPhoneNumber');
+
+        const responseItem = {
+          _id: item?._id || handshake.itemId,
+          title: item?.title || '',
+          price: item?.price || 0,
+          category: item?.category || '',
+          description: item?.description || '',
+          condition: item?.condition || '',
+          collegeName: item?.collegeName || '',
+          hostelName: item?.hostelName || '', // Hostel Name is ALWAYS public
+          images: item?.images || [],
+        };
+
+        const isApproved = handshake.status === 'approved';
+        const roomGranted = isApproved && Boolean(handshake.sharedDetails?.shareRoomNumber || handshake.sharedDetails?.shareHostel);
+        const phoneGranted = isApproved && Boolean(handshake.sharedDetails?.sharePhoneNumber || handshake.sharedDetails?.shareMobile);
+
+        const contactObj = {
+          hostelName: item?.hostelName || '',
+        };
+
+        if (roomGranted && item?.roomNumber) {
+          contactObj.roomNumber = item.roomNumber;
+          responseItem.roomNumber = item.roomNumber;
+        }
+
+        if (phoneGranted && item?.sellerPhoneNumber) {
+          contactObj.phoneNumber = item.sellerPhoneNumber;
+          contactObj.sellerPhoneNumber = item.sellerPhoneNumber;
+          responseItem.phoneNumber = item.sellerPhoneNumber;
+          responseItem.sellerPhoneNumber = item.sellerPhoneNumber;
+        }
+
+        return {
+          _id: handshake._id,
+          status: handshake.status,
+          sellerId: handshake.sellerId,
+          itemId: responseItem,
+          sharedDetails: handshake.sharedDetails,
+          permissions: {
+            shareRoomNumber: Boolean(handshake.sharedDetails?.shareRoomNumber || handshake.sharedDetails?.shareHostel),
+            sharePhoneNumber: Boolean(handshake.sharedDetails?.sharePhoneNumber || handshake.sharedDetails?.shareMobile),
+          },
+          contact: contactObj,
+          createdAt: handshake.createdAt,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      count: formattedRequests.length,
+      data: formattedRequests,
+    });
+  } catch (error) {
+    console.error(`Get My Requests Error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while loading your requests. Please try again.',
+    });
+  }
+};
+
+
+module.exports = {
+  requestContact,
+  getMyNotifications,
+  respondToHandshake,
+  getHandshakeById,
+  getMyRequests,
+};

@@ -39,25 +39,13 @@ const {
   requestContact,
   getMyNotifications,
   respondToHandshake,
+  getHandshakeById,
+  getMyRequests,
 } = require('../controllers/handshakeController');
 
 const router = express.Router(); // Create a new Express router.
 
-
-/* ── Apply auth middleware to every routes in this router ────────────────────────
-* router.use(protect) 
-      - is equivalent to adding `protect` to every single route.
-      - It's a cleaner pattern when EVERY route in a file needs authentication.
-
-Instead of:
-    - router.post(..., protect)
-    - router.get(..., protect)
-    - router.put(..., protect)
-  we apply it once here.
-    This follows the DRY (Don't Repeat Yourself) principle and prevents accidentally leaving a route 
-      unprotected. */
 router.use(protect);
-
 
 /* ── Buyer sends a contact request for an item. ─────────────────────────────────────────────
 Endpoint: POST /api/handshakes/request
@@ -74,10 +62,22 @@ Returns :
 Protected: ✅ (seller must be logged in) */
 router.get('/my-notifications', getMyNotifications);
 
+/* ── Buyer views sent contact requests. ─────────────────────────────────────────────
+Endpoint: GET /api/handshakes/my-requests
+Returns : 
+   - an array of handshakes sent by the logged-in buyer.
+Protected: ✅ (buyer must be logged in) */
+router.get('/my-requests', getMyRequests);
+
+/* ── Retrieve single handshake by ID with permission-controlled contact info. ─────
+Endpoint: GET /api/handshakes/:id
+Protected: ✅ (buyer or seller involved must be logged in) */
+router.get('/:id', getHandshakeById);
+
 /* ── Seller responds to a contact request. ──────────────────────────────────────────
 Endpoint: PUT /api/handshakes/:id/respond
 Request Body: 
-     { "status": "approved" | "declined", "shareHostel": true, "shareMobile": false }
+     { "status": "approved" | "declined", "shareRoomNumber": true, "sharePhoneNumber": false }
 Protected: ✅ + Authorization check inside the controller (only the seller can respond) */
 router.put('/:id/respond', respondToHandshake);
 

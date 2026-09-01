@@ -86,8 +86,16 @@ const HandshakeSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
-      // Whether the seller agrees to share their mobile number
+      shareRoomNumber: {
+        type: Boolean,
+        default: false,
+      },
+      // Whether the seller agrees to share their mobile/phone number
       shareMobile: {
+        type: Boolean,
+        default: false,
+      },
+      sharePhoneNumber: {
         type: Boolean,
         default: false,
       },
@@ -98,6 +106,18 @@ const HandshakeSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Keep shareRoomNumber/shareHostel and sharePhoneNumber/shareMobile synchronized
+HandshakeSchema.pre('save', function () {
+  if (this.sharedDetails) {
+    const room = Boolean(this.sharedDetails.shareRoomNumber || this.sharedDetails.shareHostel);
+    const phone = Boolean(this.sharedDetails.sharePhoneNumber || this.sharedDetails.shareMobile);
+    this.sharedDetails.shareRoomNumber = room;
+    this.sharedDetails.shareHostel = room;
+    this.sharedDetails.sharePhoneNumber = phone;
+    this.sharedDetails.shareMobile = phone;
+  }
+});
 
 /* ── Production Indexes (IMP) ────────────────────────────────────────────────────────
 check : if buyer has already requested contact for the same item, it prevents duplicate requests. 

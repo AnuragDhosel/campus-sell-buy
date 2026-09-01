@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, MapPin, Package } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { WishlistContext } from '../../context/WishlistContext';
 
 const conditionStyles = {
   'New': 'bg-[#2F6B4F]/10 text-[#2F6B4F]',
@@ -11,13 +13,17 @@ const conditionStyles = {
 
 const ProductCard = ({ item }) => {
   const navigate = useNavigate();
-  const [wishlisted, setWishlisted] = useState(false);
+  const { isInWishlist, toggleWishlist } = useContext(WishlistContext);
+  const wishlisted = isInWishlist(item._id);
 
   const hasImage = item.images && item.images.length > 0 && item.images[0].url;
 
   const handleWishlistToggle = (e) => {
     e.stopPropagation();
-    setWishlisted((prev) => !prev);
+    const added = toggleWishlist(item);
+    toast(added ? 'Added to wishlist' : 'Removed from wishlist', {
+      icon: added ? '❤️' : '💔',
+    });
   };
 
   return (
