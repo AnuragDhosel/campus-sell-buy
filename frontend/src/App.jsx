@@ -17,6 +17,10 @@ import ProductDetails from './pages/ProductDetails';
 import Notifications from './pages/Notifications';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Wishlist from './pages/Wishlist';
+import Profile from './pages/Profile';
+import MyRequests from './pages/MyRequests';
+import EditItem from './pages/EditItem';
 
 function App() {
   return (
@@ -48,7 +52,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Route>
 
         {/* Protected Routes (Only accessible if logged in) */}
@@ -56,8 +60,12 @@ function App() {
           <Route path="/home" element={<Marketplace />} />
           <Route path="/sell" element={<SellItem />} />
           <Route path="/my-listings" element={<MyListings />} />
+          <Route path="/edit-item/:id" element={<EditItem />} />
+          <Route path="/my-requests" element={<MyRequests />} />
           <Route path="/item/:id" element={<ProductDetails />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/wishlist" element={<Wishlist />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
 
         {/* Redirect root to /landing by default. 

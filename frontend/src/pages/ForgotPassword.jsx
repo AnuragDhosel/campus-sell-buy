@@ -1,48 +1,103 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Mail, ArrowLeft, KeyRound } from 'lucide-react';
-import toast from 'react-hot-toast';
-import api from '../utils/api';
+﻿import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Mail, ArrowLeft, KeyRound, ShieldCheck } from "lucide-react";
+import toast from "react-hot-toast";
+import api from "../utils/api";
 
+/**
+ * ForgotPassword — 2-step page:
+ *   Step 1: Enter email → POST /api/auth/forgot-password → OTP sent
+ *   Step 2: Enter OTP  → POST /api/auth/verify-otp       → get resetToken
+ *           → navigate to /reset-password with resetToken in location.state
+ */
 const ForgotPassword = () => {
-  const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  // Track which step we are on: 1 (email) or 2 (OTP)
+  const [step, setStep] = useState(1);
+
+  // Step 1 state
+  const [email, setEmail]         = useState("");
+  const [loadingEmail, setLoadingEmail] = useState(false);
+
+  // Step 2 state
+  const [otp, setOtp]             = useState("");
+  const [loadingOtp, setLoadingOtp]   = useState(false);
+
+  // ── Step 1: Send OTP ────────────────────────────────────────────────────────
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (!email) {
-      return toast.error('Please enter your email address');
-    }
+    if (!email.trim()) return toast.error("Please enter your email address.");
 
     try {
-      setIsLoading(true);
-      const res = await api.post('/api/auth/forgot-password', { email });
-      setIsSubmitted(true);
-      toast.success(res.data?.message || 'Reset link request processed!');
+      setLoadingEmail(true);
+      await api.post("/api/auth/forgot-password", { email: email.trim() });
+      toast.success("OTP sent! Check your email (or dev console).");
+      setStep(2);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Something went wrong. Please try again.');
+      toast.error(
+        error.response?.data?.message || "Something went wrong. Please try again."
+      );
     } finally {
-      setIsLoading(false);
+      setLoadingEmail(false);
+    }
+  };
+
+  // ── Step 2: Verify OTP ──────────────────────────────────────────────────────
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otp.trim()) return toast.error("Please enter the OTP.");
+    if (otp.trim().length !== 6) return toast.error("OTP must be exactly 6 digits.");
+
+    try {
+      setLoadingOtp(true);
+      const res = await api.post("/api/auth/verify-otp", {
+        email: email.trim(),
+        otp: otp.trim(),
+      });
+
+      const { resetToken } = res.data;
+      toast.success("OTP verified! Set your new password.");
+
+      // Pass the reset token via navigation state — not in the URL
+      navigate("/reset-password", { state: { resetToken }, replace: true });
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "OTP verification failed. Please try again."
+      );
+    } finally {
+      setLoadingOtp(false);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-[#F8FAFC]">
+      {/* Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="mx-auto w-12 h-12 bg-[#2F6B4F] rounded-xl flex items-center justify-center mb-4 shadow-sm">
-          <KeyRound className="w-6 h-6 text-white" />
+          {step === 1 ? (
+            <KeyRound className="w-6 h-6 text-white" />
+          ) : (
+            <ShieldCheck className="w-6 h-6 text-white" />
+          )}
         </div>
-        <h2 className="text-3xl font-extrabold text-[#1E293B]">Forgot Password?</h2>
+        <h2 className="text-3xl font-extrabold text-[#1E293B]">
+          {step === 1 ? "Forgot Password?" : "Enter OTP"}
+        </h2>
         <p className="mt-2 text-sm text-[#64748B]">
-          No worries, we'll send you reset instructions.
+          {step === 1
+            ? "Enter your email and we will send you a 6-digit OTP."
+            : `We sent a 6-digit OTP to ${email}. It expires in 10 minutes.`}
         </p>
       </div>
 
+      {/* Card */}
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="saas-card py-8 px-4 sm:px-10 bg-white border border-[#E2E8F0] shadow-sm rounded-xl">
-          {!isSubmitted ? (
-            <form className="space-y-6" onSubmit={handleSubmit}>
+
+          {/* ── Step 1: Email Form ────────────────────────────────────────────── */}
+          {step === 1 && (
+            <form className="space-y-6" onSubmit={handleSendOtp}>
               <div>
                 <label className="block text-sm font-medium text-[#1E293B] mb-1.5">
                   Your registered email
@@ -64,35 +119,69 @@ const ForgotPassword = () => {
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={loadingEmail}
                 className="saas-button-primary w-full py-2.5 bg-[#2F6B4F] text-white font-semibold rounded-lg hover:bg-[#265740] transition"
               >
-                {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+                {loadingEmail ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
                 ) : (
-                  'Send Reset Link'
+                  "Send OTP"
                 )}
               </button>
             </form>
-          ) : (
-            <div className="text-center space-y-4">
-              <div className="p-4 bg-[#2F6B4F]/10 rounded-lg border border-[#2F6B4F]/20 text-left">
-                <p className="text-sm text-[#1E293B]">
-                  If an account exists for <strong>{email}</strong>, a password reset link has been processed.
-                </p>
-              </div>
-              <p className="text-xs text-[#64748B]">
-                Check your email inbox (or VS Code console logs during local development) for the reset link.
-              </p>
-              <button
-                onClick={() => setIsSubmitted(false)}
-                className="text-xs text-[#2F6B4F] font-medium hover:underline"
-              >
-                Did not receive email? Try another email
-              </button>
-            </div>
           )}
 
+          {/* ── Step 2: OTP Form ──────────────────────────────────────────────── */}
+          {step === 2 && (
+            <form className="space-y-6" onSubmit={handleVerifyOtp}>
+              <div>
+                <label className="block text-sm font-medium text-[#1E293B] mb-1.5">
+                  6-Digit OTP
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  className="w-full px-4 py-3 border border-[#E2E8F0] rounded-lg text-center text-2xl font-mono font-bold tracking-[0.5em] text-[#1E293B] focus:outline-none focus:border-[#2F6B4F]"
+                  placeholder="••••••"
+                  required
+                />
+                <p className="mt-2 text-xs text-[#94A3B8] text-center">
+                  Check your email inbox or dev console for the OTP.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loadingOtp}
+                className="saas-button-primary w-full py-2.5 bg-[#2F6B4F] text-white font-semibold rounded-lg hover:bg-[#265740] transition"
+              >
+                {loadingOtp ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                ) : (
+                  "Verify OTP"
+                )}
+              </button>
+
+              {/* Resend OTP */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtp("");
+                    setStep(1);
+                  }}
+                  className="text-xs text-[#2F6B4F] font-medium hover:underline"
+                >
+                  Did not receive OTP? Go back and resend
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Back to Login */}
           <div className="mt-6 text-center">
             <Link
               to="/login"

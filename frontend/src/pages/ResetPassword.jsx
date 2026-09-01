@@ -1,44 +1,68 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import api from '../utils/api';
+﻿import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { Lock, ArrowLeft, CheckCircle2 } from "lucide-react";
+import toast from "react-hot-toast";
+import api from "../utils/api";
 
+/**
+ * ResetPassword — Step 3 of the OTP-based password reset flow.
+ *
+ * Receives `resetToken` from React Router location.state (set by ForgotPassword page
+ * after OTP verification). Token is NOT stored in the URL for security.
+ *
+ * Calls POST /api/auth/reset-password with { resetToken, newPassword }.
+ */
 const ResetPassword = () => {
-  const { token } = useParams();
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const location  = useLocation();
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const resetToken = location.state?.resetToken || null;
+
+  const [newPassword, setNewPassword]         = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading]             = useState(false);
+  const [isSuccess, setIsSuccess]             = useState(false);
+
+  // Guard: if no reset token in state, redirect to forgot-password
+  useEffect(() => {
+    if (!resetToken) {
+      toast.error("Session expired or invalid. Please start over.");
+      navigate("/forgot-password", { replace: true });
+    }
+  }, [resetToken, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!password || !confirmPassword) {
-      return toast.error('Please fill in all fields');
+    if (!newPassword || !confirmPassword) {
+      return toast.error("Please fill in all fields.");
     }
-
-    if (password.length < 6) {
-      return toast.error('Password must be at least 6 characters');
+    if (newPassword.length < 6) {
+      return toast.error("Password must be at least 6 characters.");
     }
-
-    if (password !== confirmPassword) {
-      return toast.error('Passwords do not match');
+    if (newPassword !== confirmPassword) {
+      return toast.error("Passwords do not match.");
     }
 
     try {
       setIsLoading(true);
-      const res = await api.post(`/api/auth/reset-password/${token}`, { password });
+      const res = await api.post("/api/auth/reset-password", {
+        resetToken,
+        newPassword,
+      });
       setIsSuccess(true);
-      toast.success(res.data?.message || 'Password reset successfully!');
+      toast.success(res.data?.message || "Password reset successfully!");
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Password reset failed or token expired.');
+      toast.error(
+        error.response?.data?.message ||
+          "Reset failed. The token may have expired. Please start over."
+      );
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!resetToken) return null; // avoid flash before redirect
 
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-[#F8FAFC]">
@@ -56,6 +80,7 @@ const ResetPassword = () => {
         <div className="saas-card py-8 px-4 sm:px-10 bg-white border border-[#E2E8F0] shadow-sm rounded-xl">
           {!isSuccess ? (
             <form className="space-y-6" onSubmit={handleSubmit}>
+              {/* New Password */}
               <div>
                 <label className="block text-sm font-medium text-[#1E293B] mb-1.5">
                   New Password
@@ -66,8 +91,8 @@ const ResetPassword = () => {
                   </div>
                   <input
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
                     className="saas-input saas-input-with-icon w-full pl-11 pr-4 py-2.5 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#2F6B4F]"
                     placeholder="••••••••"
                     required
@@ -75,6 +100,7 @@ const ResetPassword = () => {
                 </div>
               </div>
 
+              {/* Confirm Password */}
               <div>
                 <label className="block text-sm font-medium text-[#1E293B] mb-1.5">
                   Confirm New Password
@@ -100,9 +126,9 @@ const ResetPassword = () => {
                 className="saas-button-primary w-full py-2.5 bg-[#2F6B4F] text-white font-semibold rounded-lg hover:bg-[#265740] transition"
               >
                 {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
                 ) : (
-                  'Reset Password'
+                  "Reset Password"
                 )}
               </button>
             </form>
@@ -113,10 +139,10 @@ const ResetPassword = () => {
               </div>
               <h3 className="text-lg font-semibold text-[#1E293B]">Password Updated!</h3>
               <p className="text-sm text-[#64748B]">
-                Your password has been reset successfully. You can now sign in with your new password.
+                Your password has been reset successfully. Sign in with your new password.
               </p>
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate("/login", { replace: true })}
                 className="saas-button-primary w-full py-2.5 bg-[#2F6B4F] text-white font-semibold rounded-lg hover:bg-[#265740] transition mt-4"
               >
                 Go to Sign in
