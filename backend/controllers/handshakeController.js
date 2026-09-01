@@ -783,10 +783,69 @@ const getMyRequests = async (req, res) => {
 };
 
 
+
+// ─── Controller: Get Buyer Requests for a Specific Item ──────────────────────
+
+/**
+ * @controller getItemRequests
+ * @route   GET /api/handshakes/item/:itemId/requests
+ * @access  Private (JWT required — ONLY the seller who owns the item can view)
+ * @desc    Returns ALL handshakes (pending + approved + declined) for a specific item,
+ *          visible only to the seller who owns that item.
+ */
+const getItemRequests = async (req, res) => {
+  try {
+    const { itemId } = req.params;
+
+    // Verify the item exists and the requester is its seller
+    const item = await Item.findById(itemId);
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found.',
+      });
+    }
+
+    const itemSellerId =
+      typeof item.seller === 'object' ? item.seller.toString() : item.seller;
+    if (itemSellerId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view requests for this item.',
+      });
+    }
+
+    // Fetch all handshakes for this item
+    const handshakes = await Handshake.find({ itemId })
+      .populate('buyerId', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: handshakes.length,
+      data: handshakes,
+    });
+  } catch (error) {
+    console.error(`Get Item Requests Error: ${error.message}`);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found. Invalid ID format.',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Server error while loading buyer requests.',
+    });
+  }
+};
+
+
 module.exports = {
   requestContact,
   getMyNotifications,
   respondToHandshake,
   getHandshakeById,
   getMyRequests,
+  getItemRequests,
 };

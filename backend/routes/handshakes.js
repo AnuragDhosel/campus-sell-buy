@@ -41,6 +41,7 @@ const {
   respondToHandshake,
   getHandshakeById,
   getMyRequests,
+  getItemRequests,
 } = require('../controllers/handshakeController');
 
 const router = express.Router(); // Create a new Express router.
@@ -69,6 +70,14 @@ Returns :
 Protected: ✅ (buyer must be logged in) */
 router.get('/my-requests', getMyRequests);
 
+/* ── Seller views all buyer requests for a specific item. ────────────────────────────
+Endpoint: GET /api/handshakes/item/:itemId/requests
+Returns :
+   - all handshakes (pending + approved + declined) for that item.
+   - Enforces seller ownership: only the item's seller can access this.
+Protected: ✅ (seller must be logged in) */
+router.get('/item/:itemId/requests', getItemRequests);
+
 /* ── Retrieve single handshake by ID with permission-controlled contact info. ─────
 Endpoint: GET /api/handshakes/:id
 Protected: ✅ (buyer or seller involved must be logged in) */
@@ -82,3 +91,4 @@ Protected: ✅ + Authorization check inside the controller (only the seller can 
 router.put('/:id/respond', respondToHandshake);
 
 module.exports = router;
+
