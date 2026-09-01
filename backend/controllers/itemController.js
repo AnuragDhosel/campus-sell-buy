@@ -264,8 +264,42 @@ const createItem = async (req, res) => {
       collegeName,
       hostelName,
       roomNumber,
+      sellerPhoneNumber,
+      phoneNumber,
+      phone,
     } = req.body;
 
+    const contactPhone = sellerPhoneNumber || phoneNumber || phone;
+
+    // Field validations
+    if (!hostelName || !hostelName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide the hostel name for pickup coordination.',
+      });
+    }
+
+    if (!roomNumber || !roomNumber.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide the room number for pickup coordination.',
+      });
+    }
+
+    if (!contactPhone || !contactPhone.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid contact phone number.',
+      });
+    }
+
+    const phoneRegex = /^(?:\+91[\-\s]?)?[1-9]\d{9}$/;
+    if (!phoneRegex.test(contactPhone.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid 10-digit mobile number.',
+      });
+    }
 
     /* ── Step 3: Upload ALL images to Cloudinary in parallel ────────────────
         * const uploadPromises = 
@@ -286,80 +320,25 @@ const createItem = async (req, res) => {
       uploadToCloudinary(file.buffer, 'campus_marketplace/items') // Returns a Promise for each file
     );
 
-    /*
-      * Promise.all(uploadPromises) 
-          - Waits for all the Promises to resolve (or any to reject).
-          - If all succeed, it returns an array of Cloudinary result objects.
-          - If any fail, it throws an error and we catch it in the catch block.
-          - Example: 3 images → 3 Promises → all 3 run simultaneously.
-          - suppose : 
-              - Image1 takes 2 sec , Image2 takes 3 sec , Image3 takes 4 sec to upload.
-              - Without Promise.all
-                    Upload Image1 -> takes 2 sec
-                    Upload Image2 -> takes 3 sec
-                    Upload Image3 -> takes 4 sec
-                  Total time = 2 + 3 + 4 = 9 sec
-              - With Promise.all
-                    All uploads start together.
-                    Total time = 4 sec  
-            
-          - const cloudinaryResults =
-              Now uploads are finished, We receive something like
-                [
-                  {
-                    secure_url:"https://..."
-                  },
-                  {
-                    secure_url:"https://..."
-                  },
-                  {
-                    secure_url:"https://..."
-                  }
-                ]   
-    */
     const cloudinaryResults = await Promise.all(uploadPromises); // Waits for all uploads to finish (or any to fail)
 
-
-/* ── Step 4: Extract image data from Cloudinary results ──────────────────
-              look media notes of models/items.js file
-    Each Cloudinary result object contains many fields. We extract TWO:
-      - secure_url  → The permanent HTTPS link to the stored image.
-      - public_id   → Cloudinary's unique identifier for this asset.
-
-    WHY store public_id?
-      to delete the omage from cloudinary 
-
-    Example Cloudinary result:
-      {
-        secure_url: "https://res.cloudinary.com/your_cloud/image/upload/v1234/campus_marketplace/items/abc123.jpg",
-        public_id:  "campus_marketplace/items/abc123",
-        width: 1200, height: 800, format: "jpg", ...
-      }
-    We only keep url and publicId — the rest is metadata we don't need.
-    */
     const imageData = cloudinaryResults.map((result) => ({
       url:      result.secure_url,  // Permanent HTTPS link (displayed on frontend)
       publicId: result.public_id,   // Cloudinary asset ID (used for future delete/replace)
     }));
 
-    /* ── Step 5: Create the Item document in MongoDB ────────────────────────
-    We use `Item.create()` which is shorthand for `new Item({...}).save()`.
-    
-    IMPORTANT: `seller` is set from `req.user.id` — NOT from req.body.
-    `req.user` was attached by the `protect` middleware after JWT verification.
-    This means a user can NEVER fake their seller identity — it always comes
-    from the verified JWT, making it tamper-proof. 
-    where req.body : Data sent by the client (browser/mobile app), which controls by the client so it is not secure */
+    /* ── Step 5: Create the Item document in MongoDB ──────────────────────── */
     const newItem = await Item.create({
       title,
       description,
-      price:       Number(price),   // req.body values are strings — convert price to Number
+      price:             Number(price),   // req.body values are strings — convert price to Number
       category,
       collegeName,
       hostelName,
       roomNumber,
-      images:      imageData,        // Array of { url, publicId } objects (not plain strings anymore)
-      seller:      req.user.id,     // From JWT via protect middleware (tamper-proof) , not req.body.seller bcz users can change it 
+      sellerPhoneNumber: contactPhone.trim(),
+      images:            imageData,        // Array of { url, publicId } objects
+      seller:            req.user.id,     // From JWT via protect middleware
     });
 
     // ── Step 6: Return the newly created item ──────────────────────────────
@@ -604,7 +583,22 @@ const getItems = async (req, res) => {
  */
 const getItemById = async (req, res) => {
   try {
+    // Attempt token verification if Authorization header exists (to check if requester is the seller)
+    let requesterId = null;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      try {
+        const token = req.headers.authorization.split(' ')[1];
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        requesterId = decoded.id;
+      } catch (e) {
+        // invalid token — treat as unauthenticated public
+      }
+    }
+
+    // Select private fields so we can return them ONLY if the requester is the item's seller
     const item = await Item.findById(req.params.id)
+      .select('+roomNumber +sellerPhoneNumber')
       .populate('seller', 'name email');
 
     if (!item) {
@@ -614,9 +608,19 @@ const getItemById = async (req, res) => {
       });
     }
 
+    const itemObj = item.toObject();
+    const sellerId = typeof item.seller === 'object' ? item.seller?._id : item.seller;
+    const isOwner = requesterId && sellerId && String(sellerId) === String(requesterId);
+
+    // If requester is NOT the item owner/seller, purge private fields
+    if (!isOwner) {
+      delete itemObj.roomNumber;
+      delete itemObj.sellerPhoneNumber;
+    }
+
     res.status(200).json({
       success: true,
-      data: item,
+      data: itemObj,
     });
   } catch (error) {
     console.error(`Get Item By ID Error: ${error.message}`);
@@ -631,6 +635,192 @@ const getItemById = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching the item. Please try again.',
+    });
+  }
+};
+
+
+// ─── Controller: Update Item ─────────────────────────────────────────────────
+
+/**
+ * @controller updateItem
+ * @route   PUT /api/items/:id
+ * @access  Private (JWT required — ONLY owner/seller can update)
+ * @desc    Updates a seller's item fields while keeping system/moderation fields intact.
+ */
+const updateItem = async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id);
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found.',
+      });
+    }
+
+    // Ownership check: only actual seller can update
+    const sellerId = typeof item.seller === 'object' ? item.seller._id : item.seller;
+    if (sellerId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to update this listing.',
+      });
+    }
+
+    const {
+      title,
+      description,
+      price,
+      category,
+      condition,
+      collegeName,
+      hostelName,
+      roomNumber,
+      sellerPhoneNumber,
+      phoneNumber,
+      phone,
+    } = req.body;
+
+    // Field Validations if provided
+    if (title !== undefined) {
+      if (!title.trim()) {
+        return res.status(400).json({ success: false, message: 'Item name is required.' });
+      }
+      if (title.trim().length > 150) {
+        return res.status(400).json({ success: false, message: 'Title cannot exceed 150 characters.' });
+      }
+      item.title = title.trim();
+    }
+
+    if (description !== undefined) {
+      if (!description.trim()) {
+        return res.status(400).json({ success: false, message: 'Description is required.' });
+      }
+      if (description.trim().length > 2000) {
+        return res.status(400).json({ success: false, message: 'Description cannot exceed 2000 characters.' });
+      }
+      item.description = description.trim();
+    }
+
+    if (price !== undefined) {
+      const numPrice = Number(price);
+      if (isNaN(numPrice) || numPrice <= 0) {
+        return res.status(400).json({ success: false, message: 'Price must be greater than ₹0.' });
+      }
+      item.price = numPrice;
+    }
+
+    if (category !== undefined) {
+      if (!category) {
+        return res.status(400).json({ success: false, message: 'Category is required.' });
+      }
+      item.category = category;
+    }
+
+    if (condition !== undefined) item.condition = condition;
+    if (collegeName !== undefined) item.collegeName = collegeName.trim();
+    if (hostelName !== undefined) item.hostelName = hostelName.trim();
+    if (roomNumber !== undefined) item.roomNumber = roomNumber.trim();
+
+    const contactPhone = sellerPhoneNumber || phoneNumber || phone;
+    if (contactPhone !== undefined) {
+      const phoneRegex = /^(?:\+91[\-\s]?)?[1-9]\d{9}$/;
+      if (!phoneRegex.test(contactPhone.trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid 10-digit mobile number.',
+        });
+      }
+      item.sellerPhoneNumber = contactPhone.trim();
+    }
+
+    await item.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Listing updated successfully!',
+      data: item,
+    });
+  } catch (error) {
+    console.error(`Update Item Error: ${error.message}`);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found. Invalid ID format.',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating the listing. Please try again.',
+    });
+  }
+};
+
+
+// ─── Controller: Delete Item ─────────────────────────────────────────────────
+
+/**
+ * @controller deleteItem
+ * @route   DELETE /api/items/:id
+ * @access  Private (JWT required — ONLY owner/seller can delete)
+ * @desc    Deletes a seller's item from MongoDB, cleans up associated handshakes and Cloudinary images.
+ */
+const deleteItem = async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id);
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found.',
+      });
+    }
+
+    // Ownership check: only actual seller can delete
+    const sellerId = typeof item.seller === 'object' ? item.seller._id : item.seller;
+    if (sellerId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to delete this listing.',
+      });
+    }
+
+    // Clean up Cloudinary images if publicId exists
+    if (Array.isArray(item.images)) {
+      for (const img of item.images) {
+        if (img.publicId) {
+          try {
+            await cloudinary.uploader.destroy(img.publicId);
+          } catch (cloudErr) {
+            console.error(`Cloudinary image deletion failed for ${img.publicId}:`, cloudErr.message);
+          }
+        }
+      }
+    }
+
+    // Clean up associated handshake documents
+    const Handshake = require('../models/Handshake');
+    await Handshake.deleteMany({ itemId: item._id });
+
+    // Delete item from MongoDB
+    await item.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: 'Listing deleted successfully.',
+    });
+  } catch (error) {
+    console.error(`Delete Item Error: ${error.message}`);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found. Invalid ID format.',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting the listing. Please try again.',
     });
   }
 };
@@ -768,4 +958,4 @@ const reportItem = async (req, res) => {
 };
 
 
-module.exports = { createItem, getItems, getItemById, reportItem };
+module.exports = { createItem, getItems, getItemById, updateItem, deleteItem, reportItem };

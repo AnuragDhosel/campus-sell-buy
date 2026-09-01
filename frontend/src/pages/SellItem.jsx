@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X, ImagePlus, ArrowLeft, Loader2, Lock } from 'lucide-react';
+import { Upload, X, ImagePlus, ArrowLeft, Loader2, Lock, Globe } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import Navbar from '../components/Navbar';
@@ -15,7 +15,6 @@ const MAX_DESC_LENGTH = 2000;
 const SellItem = () => {
   const navigate = useNavigate();
 
-
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -24,6 +23,7 @@ const SellItem = () => {
     collegeName: '',
     hostelName: '',
     roomNumber: '',
+    sellerPhoneNumber: '',
   });
 
   const [images, setImages] = useState([]); // { file, preview }
@@ -33,7 +33,6 @@ const SellItem = () => {
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user types
     setErrors((prev) => {
       if (!prev[name]) return prev;
       const next = { ...prev };
@@ -49,7 +48,10 @@ const SellItem = () => {
     const currentCount = images.length;
 
     if (currentCount + files.length > MAX_IMAGES) {
-      setErrors((prev) => ({ ...prev, images: `Maximum ${MAX_IMAGES} images allowed. You can add ${MAX_IMAGES - currentCount} more.` }));
+      setErrors((prev) => ({
+        ...prev,
+        images: `Maximum ${MAX_IMAGES} images allowed. You can add ${MAX_IMAGES - currentCount} more.`,
+      }));
       e.target.value = '';
       return;
     }
@@ -57,13 +59,19 @@ const SellItem = () => {
     const validFiles = [];
     for (const file of files) {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        setErrors((prev) => ({ ...prev, images: `"${file.name}" is not supported. Only JPG, JPEG, and PNG files are allowed.` }));
+        setErrors((prev) => ({
+          ...prev,
+          images: `"${file.name}" is not supported. Only JPG, JPEG, and PNG files are allowed.`,
+        }));
         e.target.value = '';
         return;
       }
       if (file.size > MAX_FILE_SIZE) {
         const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-        setErrors((prev) => ({ ...prev, images: `"${file.name}" is ${sizeMB}MB. Each image must be under 5MB.` }));
+        setErrors((prev) => ({
+          ...prev,
+          images: `"${file.name}" is ${sizeMB}MB. Each image must be under 5MB.`,
+        }));
         e.target.value = '';
         return;
       }
@@ -81,7 +89,6 @@ const SellItem = () => {
       return next;
     });
 
-    // Reset file input
     e.target.value = '';
   }, [images.length]);
 
@@ -98,10 +105,12 @@ const SellItem = () => {
     const newErrors = {};
 
     if (!formData.title.trim()) newErrors.title = 'Item name is required.';
-    else if (formData.title.trim().length > MAX_TITLE_LENGTH) newErrors.title = `Title cannot exceed ${MAX_TITLE_LENGTH} characters.`;
+    else if (formData.title.trim().length > MAX_TITLE_LENGTH)
+      newErrors.title = `Title cannot exceed ${MAX_TITLE_LENGTH} characters.`;
 
     if (!formData.description.trim()) newErrors.description = 'Description is required.';
-    else if (formData.description.trim().length > MAX_DESC_LENGTH) newErrors.description = `Description cannot exceed ${MAX_DESC_LENGTH} characters.`;
+    else if (formData.description.trim().length > MAX_DESC_LENGTH)
+      newErrors.description = `Description cannot exceed ${MAX_DESC_LENGTH} characters.`;
 
     if (!formData.price) newErrors.price = 'Price is required.';
     else if (Number(formData.price) <= 0) newErrors.price = 'Price must be greater than ₹0.';
@@ -110,11 +119,20 @@ const SellItem = () => {
     if (!formData.collegeName.trim()) newErrors.collegeName = 'College name is required.';
     if (!formData.hostelName.trim()) newErrors.hostelName = 'Hostel name is required.';
     if (!formData.roomNumber.trim()) newErrors.roomNumber = 'Room number is required.';
+
+    if (!formData.sellerPhoneNumber.trim()) {
+      newErrors.sellerPhoneNumber = 'Phone number is required.';
+    } else {
+      const phoneRegex = /^(?:\+91[\-\s]?)?[1-9]\d{9}$/;
+      if (!phoneRegex.test(formData.sellerPhoneNumber.trim())) {
+        newErrors.sellerPhoneNumber = 'Please enter a valid valid mobile number.';
+      }
+    }
+
     if (images.length === 0) newErrors.images = 'Upload at least 1 image of your item.';
 
     setErrors(newErrors);
 
-    // Scroll to first error
     if (Object.keys(newErrors).length > 0) {
       const firstErrorField = Object.keys(newErrors)[0];
       const el = document.getElementById(`field-${firstErrorField}`);
@@ -128,7 +146,7 @@ const SellItem = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isSubmitting) return; // Prevent double submission
+    if (isSubmitting) return;
     if (!validate()) return;
 
     setIsSubmitting(true);
@@ -142,6 +160,7 @@ const SellItem = () => {
       data.append('collegeName', formData.collegeName.trim());
       data.append('hostelName', formData.hostelName.trim());
       data.append('roomNumber', formData.roomNumber.trim());
+      data.append('sellerPhoneNumber', formData.sellerPhoneNumber.trim());
 
       images.forEach((img) => {
         data.append('images', img.file);
@@ -153,10 +172,8 @@ const SellItem = () => {
 
       toast.success('Item listed successfully! 🎉');
 
-      // Clean up previews
       images.forEach((img) => URL.revokeObjectURL(img.preview));
 
-      // Reset form
       setFormData({
         title: '',
         description: '',
@@ -165,6 +182,7 @@ const SellItem = () => {
         collegeName: '',
         hostelName: '',
         roomNumber: '',
+        sellerPhoneNumber: '',
       });
       setImages([]);
       setErrors({});
@@ -224,9 +242,15 @@ const SellItem = () => {
                   />
                   <div className="flex justify-between mt-1">
                     {errors.title ? (
-                      <p className="text-[#D97757] text-xs" role="alert">{errors.title}</p>
-                    ) : <span />}
-                    <span className="text-[#64748B] text-xs">{formData.title.length}/{MAX_TITLE_LENGTH}</span>
+                      <p className="text-[#D97757] text-xs" role="alert">
+                        {errors.title}
+                      </p>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="text-[#64748B] text-xs">
+                      {formData.title.length}/{MAX_TITLE_LENGTH}
+                    </span>
                   </div>
                 </div>
 
@@ -249,9 +273,15 @@ const SellItem = () => {
                   />
                   <div className="flex justify-between mt-1">
                     {errors.description ? (
-                      <p className="text-[#D97757] text-xs" role="alert">{errors.description}</p>
-                    ) : <span />}
-                    <span className="text-[#64748B] text-xs">{formData.description.length}/{MAX_DESC_LENGTH}</span>
+                      <p className="text-[#D97757] text-xs" role="alert">
+                        {errors.description}
+                      </p>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="text-[#64748B] text-xs">
+                      {formData.description.length}/{MAX_DESC_LENGTH}
+                    </span>
                   </div>
                 </div>
 
@@ -275,7 +305,9 @@ const SellItem = () => {
                       className={`saas-input ${errors.price ? 'border-[#D97757]' : ''}`}
                     />
                     {errors.price && (
-                      <p className="text-[#D97757] text-xs mt-1" role="alert">{errors.price}</p>
+                      <p className="text-[#D97757] text-xs mt-1" role="alert">
+                        {errors.price}
+                      </p>
                     )}
                   </div>
 
@@ -291,15 +323,21 @@ const SellItem = () => {
                       onChange={handleChange}
                       aria-required="true"
                       aria-invalid={!!errors.category}
-                      className={`saas-input ${errors.category ? 'border-[#D97757]' : ''} ${!formData.category ? 'text-[#64748B]' : ''}`}
+                      className={`saas-input ${errors.category ? 'border-[#D97757]' : ''} ${
+                        !formData.category ? 'text-[#64748B]' : ''
+                      }`}
                     >
                       <option value="">Select category</option>
                       {CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
                       ))}
                     </select>
                     {errors.category && (
-                      <p className="text-[#D97757] text-xs mt-1" role="alert">{errors.category}</p>
+                      <p className="text-[#D97757] text-xs mt-1" role="alert">
+                        {errors.category}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -309,77 +347,130 @@ const SellItem = () => {
             {/* Divider */}
             <div className="border-t border-[#E2E8F0]" />
 
-            {/* Section: Location Details */}
+            {/* Section: Location & Contact Details */}
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-lg font-semibold text-[#1E293B]">Location Details</h2>
-                <Lock className="w-4 h-4 text-[#84A98C]" />
+                <h2 className="text-lg font-semibold text-[#1E293B]">Location & Contact Details</h2>
               </div>
               <p className="text-[#64748B] text-xs mb-4">
-                Your hostel and room details are private and only shared when you approve a contact request.
+                College & Hostel names are <span className="font-semibold text-[#2F6B4F]">Public</span>. Room number & Phone number are <span className="font-semibold text-[#D97757]">Private</span> (shared only with approved buyers).
               </p>
-              <div className="space-y-4">
-                {/* College Name */}
-                <div id="field-collegeName">
-                  <label htmlFor="input-collegeName" className="block text-sm font-medium text-[#1E293B] mb-1.5">
-                    College Name <span className="text-[#D97757]">*</span>
-                  </label>
-                  <input
-                    id="input-collegeName"
-                    type="text"
-                    name="collegeName"
-                    value={formData.collegeName}
-                    onChange={handleChange}
-                    placeholder="e.g. MITS Gwalior"
-                    aria-required="true"
-                    aria-invalid={!!errors.collegeName}
-                    className={`saas-input ${errors.collegeName ? 'border-[#D97757]' : ''}`}
-                  />
-                  {errors.collegeName && (
-                    <p className="text-[#D97757] text-xs mt-1" role="alert">{errors.collegeName}</p>
-                  )}
-                </div>
 
+              <div className="space-y-4">
+                {/* College Name & Hostel Name Row (PUBLIC) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* College Name */}
+                  <div id="field-collegeName">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="input-collegeName" className="text-sm font-medium text-[#1E293B]">
+                        College Name <span className="text-[#D97757]">*</span>
+                      </label>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#2F6B4F]/10 text-[#2F6B4F] px-2 py-0.5 rounded-full">
+                        <Globe className="w-2.5 h-2.5" /> Public
+                      </span>
+                    </div>
+                    <input
+                      id="input-collegeName"
+                      type="text"
+                      name="collegeName"
+                      value={formData.collegeName}
+                      onChange={handleChange}
+                      placeholder="e.g. MITS Gwalior"
+                      aria-required="true"
+                      aria-invalid={!!errors.collegeName}
+                      className={`saas-input ${errors.collegeName ? 'border-[#D97757]' : ''}`}
+                    />
+                    {errors.collegeName && (
+                      <p className="text-[#D97757] text-xs mt-1" role="alert">
+                        {errors.collegeName}
+                      </p>
+                    )}
+                  </div>
+
                   {/* Hostel Name */}
                   <div id="field-hostelName">
-                    <label htmlFor="input-hostelName" className="block text-sm font-medium text-[#1E293B] mb-1.5">
-                      Hostel Name <span className="text-[#D97757]">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="input-hostelName" className="text-sm font-medium text-[#1E293B]">
+                        Hostel Name <span className="text-[#D97757]">*</span>
+                      </label>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#2F6B4F]/10 text-[#2F6B4F] px-2 py-0.5 rounded-full">
+                        <Globe className="w-2.5 h-2.5" /> Public
+                      </span>
+                    </div>
                     <input
                       id="input-hostelName"
                       type="text"
                       name="hostelName"
                       value={formData.hostelName}
                       onChange={handleChange}
-                      placeholder="e.g. Hostel B"
+                      placeholder="e.g. Hostel Block A"
                       aria-required="true"
                       aria-invalid={!!errors.hostelName}
                       className={`saas-input ${errors.hostelName ? 'border-[#D97757]' : ''}`}
                     />
                     {errors.hostelName && (
-                      <p className="text-[#D97757] text-xs mt-1" role="alert">{errors.hostelName}</p>
+                      <p className="text-[#D97757] text-xs mt-1" role="alert">
+                        {errors.hostelName}
+                      </p>
                     )}
                   </div>
+                </div>
 
+                {/* Room Number & Phone Number Row (PRIVATE / LOCKED) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Room Number */}
                   <div id="field-roomNumber">
-                    <label htmlFor="input-roomNumber" className="block text-sm font-medium text-[#1E293B] mb-1.5">
-                      Room Number <span className="text-[#D97757]">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="input-roomNumber" className="text-sm font-medium text-[#1E293B]">
+                        Room Number <span className="text-[#D97757]">*</span>
+                      </label>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#D97757]/10 text-[#D97757] px-2 py-0.5 rounded-full">
+                        <Lock className="w-2.5 h-2.5" /> Private
+                      </span>
+                    </div>
                     <input
                       id="input-roomNumber"
                       type="text"
                       name="roomNumber"
                       value={formData.roomNumber}
                       onChange={handleChange}
-                      placeholder="e.g. 304"
+                      placeholder="e.g. A-304"
                       aria-required="true"
                       aria-invalid={!!errors.roomNumber}
                       className={`saas-input ${errors.roomNumber ? 'border-[#D97757]' : ''}`}
                     />
                     {errors.roomNumber && (
-                      <p className="text-[#D97757] text-xs mt-1" role="alert">{errors.roomNumber}</p>
+                      <p className="text-[#D97757] text-xs mt-1" role="alert">
+                        {errors.roomNumber}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Phone Number */}
+                  <div id="field-sellerPhoneNumber">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor="input-sellerPhoneNumber" className="text-sm font-medium text-[#1E293B]">
+                        Phone Number <span className="text-[#D97757]">*</span>
+                      </label>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-[#D97757]/10 text-[#D97757] px-2 py-0.5 rounded-full">
+                        <Lock className="w-2.5 h-2.5" /> Private
+                      </span>
+                    </div>
+                    <input
+                      id="input-sellerPhoneNumber"
+                      type="tel"
+                      name="sellerPhoneNumber"
+                      value={formData.sellerPhoneNumber}
+                      onChange={handleChange}
+                      placeholder="e.g. 9876543210"
+                      aria-required="true"
+                      aria-invalid={!!errors.sellerPhoneNumber}
+                      className={`saas-input ${errors.sellerPhoneNumber ? 'border-[#D97757]' : ''}`}
+                    />
+                    {errors.sellerPhoneNumber && (
+                      <p className="text-[#D97757] text-xs mt-1" role="alert">
+                        {errors.sellerPhoneNumber}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -405,7 +496,6 @@ const SellItem = () => {
                       alt={`Product preview ${index + 1}`}
                       className="w-full h-full object-cover"
                     />
-                    {/* Remove button — always visible on mobile, hover on desktop */}
                     <button
                       type="button"
                       onClick={() => removeImage(index)}
@@ -440,7 +530,9 @@ const SellItem = () => {
               </div>
 
               {errors.images && (
-                <p className="text-[#D97757] text-xs" role="alert">{errors.images}</p>
+                <p className="text-[#D97757] text-xs" role="alert">
+                  {errors.images}
+                </p>
               )}
             </div>
           </div>

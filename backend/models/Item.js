@@ -132,12 +132,11 @@ AND the middleware level (Multer limits in middleware/upload.js). */
       trim: true,
     },
 
-    // PRIVATE: Only revealed after a Handshake is approved.
+    // PUBLIC: Always visible on public item queries.
     hostelName: {
       type: String,
       required: [true, 'Please provide the hostel name for pickup coordination'],
       trim: true,
-      select: false, // Hidden from all public queries by default
     },
 
     // PRIVATE: Only revealed after a Handshake is approved.
@@ -146,6 +145,20 @@ AND the middleware level (Multer limits in middleware/upload.js). */
       required: [true, 'Please provide the room number for pickup coordination'],
       trim: true,
       select: false, // Hidden from all public queries by default
+    },
+
+    // PRIVATE: Only revealed after a Handshake is approved with phone permission.
+    sellerPhoneNumber: {
+      type: String,
+      required: [true, 'Please provide a valid phone number'],
+      trim: true,
+      select: false, // Hidden from all public queries by default
+      validate: {
+        validator: function (v) {
+          return /^(?:\+91[\-\s]?)?[1-9]\d{9}$/.test(v);
+        },
+        message: 'Please provide a valid 10-digit mobile number',
+      },
     },
 
     // ── Relationships ─────────────────────────────────────────────────────────

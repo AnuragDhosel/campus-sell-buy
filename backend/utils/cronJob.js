@@ -31,7 +31,7 @@ CRON JOB NOTES
 
 * Important:
     • Cron Job does NOT run continuously.
-    • It waits for the scheduled time, executes the task, then waits again.
+    • It waits for the scheduled time, and then executes the task, and then waits again.
     • Always call connectDB() before startCronJobs() so database operations work correctly.
 
 * node-cron Example:

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, Plus, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Package, Plus, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import Navbar from '../components/Navbar';
@@ -17,20 +17,23 @@ const MyListings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Delete modal state
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const fetchMyItems = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Backend GET /api/items returns all available items with seller populated
-      // We filter client-side to get only the current user's items
       const response = await api.get('/api/items');
       const allItems = response.data?.data || [];
 
       const myItems = allItems.filter((item) => {
         const sellerId =
           typeof item.seller === 'object' ? item.seller._id : item.seller;
-        return sellerId === user?.id;
+        return String(sellerId) === String(user?.id);
       });
 
       setItems(myItems);
@@ -51,15 +54,38 @@ const MyListings = () => {
     }
   }, [user?.id, fetchMyItems]);
 
-  const handleEdit = useCallback((item) => {
-    // Placeholder — backend PUT /api/items/:id not yet implemented
-    toast('Edit functionality coming soon!', { icon: '🛠️' });
+  const handleEdit = useCallback(
+    (item) => {
+      navigate(`/edit-item/${item._id}`);
+    },
+    [navigate]
+  );
+
+  const handlePromptDelete = useCallback((item) => {
+    setItemToDelete(item);
+    setShowDeleteModal(true);
   }, []);
 
-  const handleDelete = useCallback((item) => {
-    // Placeholder — backend DELETE /api/items/:id not yet implemented
-    toast('Delete functionality coming soon!', { icon: '🛠️' });
-  }, []);
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return;
+    setIsDeleting(true);
+
+    try {
+      await api.delete(`/api/items/${itemToDelete._id}`);
+
+      // Optimistically remove from state
+      setItems((prev) => prev.filter((i) => i._id !== itemToDelete._id));
+      toast.success('Listing deleted successfully.');
+      setShowDeleteModal(false);
+      setItemToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete listing:', err);
+      const msg = err.response?.data?.message || 'Unable to delete this listing. Please try again.';
+      toast.error(msg);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -125,7 +151,7 @@ const MyListings = () => {
                 key={item._id}
                 item={item}
                 onEdit={handleEdit}
-                onDelete={handleDelete}
+                onDelete={handlePromptDelete}
               />
             ))}
           </div>
@@ -142,6 +168,67 @@ const MyListings = () => {
           </button>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && itemToDelete && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeleting) {
+              setShowDeleteModal(false);
+              setItemToDelete(null);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-modal-title"
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-[#D97757]/10 flex items-center justify-center mb-3 text-[#D97757]">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <h2 id="delete-modal-title" className="text-lg font-semibold text-[#1E293B]">
+                Delete this listing?
+              </h2>
+              <p className="text-xs text-[#64748B] mt-1">
+                Are you sure you want to delete <span className="font-semibold text-[#1E293B]">"{itemToDelete.title}"</span>? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setItemToDelete(null);
+                }}
+                disabled={isDeleting}
+                className="saas-button-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex-1 inline-flex items-center justify-center text-sm font-medium py-2.5 px-4 rounded-xl bg-[#D97757] hover:bg-[#C56648] text-white transition disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </span>
+                ) : (
+                  'Delete Listing'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
