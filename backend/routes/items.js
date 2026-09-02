@@ -4,12 +4,13 @@
  * Base path (registered in server.js): /api/items
  *
  * Available Routes:
- *   POST   /api/items            → Create a new listing (Private)
- *   GET    /api/items            → Browse/search items with filters (Public)
- *   GET    /api/items/:id        → Fetch item by ID (Public)
- *   PUT    /api/items/:id        → Update listing (Private - Owner only)
- *   DELETE /api/items/:id        → Delete listing (Private - Owner only)
- *   PUT    /api/items/:id/report → Report an item (Private)
+ *   POST   /api/items            -> Create a new listing (Private)
+ *   GET    /api/items            -> Browse/search items with filters (Public)
+ *   GET    /api/items/colleges   -> Get distinct college names with counts (Public)
+ *   GET    /api/items/:id        -> Fetch item by ID (Public)
+ *   PUT    /api/items/:id        -> Update listing (Private - Owner only)
+ *   DELETE /api/items/:id        -> Delete listing (Private - Owner only)
+ *   PUT    /api/items/:id/report -> Report an item (Private)
  */
 
 const express = require('express');
@@ -22,6 +23,8 @@ const {
   updateItem,
   deleteItem,
   reportItem,
+  getColleges,
+  renewItem,
 } = require('../controllers/itemController');
 
 const router = express.Router();
@@ -56,22 +59,31 @@ const handleUpload = (req, res, next) => {
   });
 };
 
-/* ── POST /api/items ─────────────────────────────────────────────────────────── */
+/* -- POST /api/items */
 router.post('/', protect, handleUpload, createItem);
 
-/* ── GET /api/items ──────────────────────────────────────────────────────────── */
+/* -- GET /api/items */
 router.get('/', getItems);
 
-/* ── GET /api/items/:id ──────────────────────────────────────────────────────── */
+/* -- GET /api/items/colleges
+     IMPORTANT: registered BEFORE /:id so Express does not treat "colleges" as an ObjectId param */
+router.get('/colleges', getColleges);
+
+/* -- GET /api/items/:id */
 router.get('/:id', getItemById);
 
-/* ── PUT /api/items/:id ──────────────────────────────────────────────────────── */
+/* -- PUT /api/items/:id/renew
+     IMPORTANT: registered BEFORE PUT /:id to prevent Express treating "renew" as a generic :id value.
+     Seller ownership and action_required state are verified inside the renewItem controller. */
+router.put('/:id/renew', protect, renewItem);
+
+/* -- PUT /api/items/:id */
 router.put('/:id', protect, updateItem);
 
-/* ── DELETE /api/items/:id ───────────────────────────────────────────────────── */
+/* -- DELETE /api/items/:id */
 router.delete('/:id', protect, deleteItem);
 
-/* ── PUT /api/items/:id/report ───────────────────────────────────────────────── */
+/* -- PUT /api/items/:id/report */
 router.put('/:id/report', protect, reportItem);
 
 module.exports = router;

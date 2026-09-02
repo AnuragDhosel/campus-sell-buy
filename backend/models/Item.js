@@ -190,6 +190,14 @@ AND the middleware level (Multer limits in middleware/upload.js). */
       },
       default: 'available',
     },
+
+    // Set by cron the first time an item moves available → action_required.
+    // Used to calculate the 7-day window before automatic archival.
+    // Cleared back to null when the seller renews the listing.
+    actionRequiredAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     // Automatically adds `createdAt` and `updatedAt` timestamp fields

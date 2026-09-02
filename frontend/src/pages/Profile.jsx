@@ -28,6 +28,8 @@ import {
   Shield,
   LayoutList,
   ChevronRight,
+  HelpCircle,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -46,6 +48,7 @@ const Profile = () => {
   const [requestsCount, setRequestsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   useEffect(() => {
     const fetchProfileAndStats = async () => {
@@ -355,6 +358,20 @@ const Profile = () => {
             </div>
           </div>
 
+          {/* SECTION 3b: Help & Support */}
+          <div className="p-6">
+            <button
+              onClick={() => setShowHelpModal(true)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] hover:border-[#84A98C] transition group text-left shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <HelpCircle className="w-4 h-4 text-[#2F6B4F]" />
+                <span className="text-sm font-semibold text-[#1E293B]">Help &amp; Support</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#64748B] group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+
           {/* SECTION 4: Account & Logout */}
           <div className="p-6 bg-[#F8FAFC]/50">
             <h3 className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-3">
@@ -372,8 +389,69 @@ const Profile = () => {
 
         </div>
       </main>
+
+      {/* Help & Support Modal */}
+      {showHelpModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => setShowHelpModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-sm p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setShowHelpModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B] transition"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Icon + title */}
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="w-12 h-12 rounded-xl bg-[#2F6B4F]/10 flex items-center justify-center mb-3">
+                <HelpCircle className="w-6 h-6 text-[#2F6B4F]" />
+              </div>
+              <h2 className="text-lg font-bold text-[#1E293B]">Help &amp; Support</h2>
+              <p className="text-sm text-[#64748B] mt-1">
+                Need help? Contact us using the email below.
+              </p>
+            </div>
+
+            {/* Support email display */}
+            <div className="flex items-center gap-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 mb-5">
+              <Mail className="w-4 h-4 text-[#2F6B4F] shrink-0" />
+              <span className="text-sm font-semibold text-[#1E293B] break-all">
+                use2ndanywhere254@gmail.com
+              </span>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-col gap-2">
+              <a
+                href="https://mail.google.com/mail/?view=cm&fs=1&to=use2ndanywhere254@gmail.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#2F6B4F] hover:bg-[#245539] text-white font-semibold text-sm transition"
+              >
+                <Mail className="w-4 h-4" />
+                Send Email
+              </a>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="w-full flex items-center justify-center px-4 py-3 rounded-xl border border-[#E2E8F0] text-[#64748B] hover:bg-[#F8FAFC] font-semibold text-sm transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Profile;
+

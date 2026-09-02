@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-const categories = ['All', 'Books', 'Electronics', 'Furniture', 'Clothing', 'Stationery', 'Sports', 'Other'];
+const categories = ['All Categories', 'Books', 'Electronics', 'Furniture', 'Clothing', 'Stationery', 'Sports', 'Other'];
 
 const CategoryDropdown = ({ selectedCategory, onCategoryChange, itemCounts }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const displayLabel = selectedCategory || 'All';
+  const displayLabel = selectedCategory || 'All Categories';
+
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -22,10 +23,10 @@ const CategoryDropdown = ({ selectedCategory, onCategoryChange, itemCounts }) =>
   }, []);
 
   const handleSelect = (category) => {
-    const value = category === 'All' ? '' : category;
+    const value = category === 'All Categories' ? '' : category;
 
     // If itemCounts provided and count is 0, don't allow selection
-    if (category !== 'All' && itemCounts && itemCounts[category] === 0) {
+    if (category !== 'All Categories' && itemCounts && itemCounts[category] === 0) {
       return;
     }
 
@@ -34,12 +35,12 @@ const CategoryDropdown = ({ selectedCategory, onCategoryChange, itemCounts }) =>
   };
 
   const isSelected = (category) => {
-    if (category === 'All') return !selectedCategory || selectedCategory === '';
+    if (category === 'All Categories') return !selectedCategory || selectedCategory === '';
     return selectedCategory === category;
   };
 
   const isDisabled = (category) => {
-    return category !== 'All' && itemCounts && itemCounts[category] === 0;
+    return category !== 'All Categories' && itemCounts && itemCounts[category] === 0;
   };
 
   return (
@@ -79,7 +80,7 @@ const CategoryDropdown = ({ selectedCategory, onCategoryChange, itemCounts }) =>
                 `}
               >
                 <span>{category}</span>
-                {category !== 'All' && itemCounts && itemCounts[category] !== undefined && (
+                {category !== 'All Categories' && itemCounts && itemCounts[category] !== undefined && (
                   <span className="text-xs text-[#64748B]">
                     {itemCounts[category]}
                   </span>

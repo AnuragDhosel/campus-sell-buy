@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ShoppingBag, Plus, Heart, Bell, User, Menu, X, LogOut, LayoutList, Inbox } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
@@ -56,14 +56,15 @@ const Navbar = () => {
     navigate('/notifications');
   };
 
-  // Fetch notification badge status for both Seller requests and Buyer responses
+  // Fetch notification badge — counts only UNREAD notifications (by ID tracking)
   useEffect(() => {
     if (!user) {
       setBadgeCount(0);
       return;
     }
 
-    const storageKey = `cm_last_viewed_notifs_${user.id || user._id}`;
+    // Storage key holds a JSON array of notification _id strings the user has already seen
+    const readKey = `cm_read_notif_ids_${user.id || user._id}`;
 
     const fetchNotificationCounts = async () => {
       try {
@@ -75,40 +76,47 @@ const Navbar = () => {
         const sellerNotifications = sellerRes.status === 'fulfilled' ? (sellerRes.value.data?.data || []) : [];
         const buyerRequests = buyerRes.status === 'fulfilled' ? (buyerRes.value.data?.data || []) : [];
 
-        // Seller incoming pending requests count
-        const sellerPendingCount = sellerNotifications.filter((n) => n.status === 'pending').length;
+        // All notification-eligible items
+        const allNotifications = [
+          ...sellerNotifications,
+          ...buyerRequests.filter((req) => req.status === 'approved' || req.status === 'declined'),
+        ];
 
-        // Buyer responses count (accepted or declined requests)
-        let buyerResponseCount = 0;
-        if (location.pathname === '/notifications') {
-          // If currently on notifications page, mark buyer responses as viewed
-          localStorage.setItem(storageKey, new Date().toISOString());
-        } else {
-          const buyerResponses = buyerRequests.filter(
-            (req) => req.status === 'approved' || req.status === 'declined'
-          );
-          if (buyerResponses.length > 0) {
-            const lastViewed = localStorage.getItem(storageKey);
-            if (!lastViewed) {
-              buyerResponseCount = 1;
-            } else {
-              const lastViewedTime = new Date(lastViewed).getTime();
-              const hasNewResponse = buyerResponses.some((req) => {
-                const reqTime = new Date(req.updatedAt || req.createdAt).getTime();
-                return reqTime > lastViewedTime;
-              });
-              if (hasNewResponse) buyerResponseCount = 1;
-            }
-          }
+        // Load previously-read IDs from localStorage
+        let readIds = [];
+        try {
+          readIds = JSON.parse(localStorage.getItem(readKey) || '[]');
+        } catch {
+          readIds = [];
         }
+        const readSet = new Set(readIds);
 
-        setBadgeCount(sellerPendingCount + buyerResponseCount);
+        if (location.pathname === '/notifications') {
+          // User is on the notifications page — mark all current notifications as read
+          const currentIds = allNotifications.map((n) => String(n._id));
+          const merged = Array.from(new Set([...readIds, ...currentIds]));
+          localStorage.setItem(readKey, JSON.stringify(merged));
+          setBadgeCount(0);
+        } else {
+          // Count notifications whose _id has NOT been seen before
+          const unreadCount = allNotifications.filter((n) => !readSet.has(String(n._id))).length;
+          setBadgeCount(unreadCount);
+        }
       } catch {
         // Silently fail — badge just won't show
       }
     };
 
     fetchNotificationCounts();
+
+    // Poll periodically and on focus to capture background cron expiry and moderation notifications
+    const interval = setInterval(fetchNotificationCounts, 10000);
+    window.addEventListener('focus', fetchNotificationCounts);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchNotificationCounts);
+    };
   }, [location.pathname, user]);
 
   // ── Logout ─────────────────────────────────────────────────────────────────
@@ -162,7 +170,12 @@ const Navbar = () => {
     <nav className="sticky top-0 z-40 bg-white border-b border-[#E2E8F0]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center">
         {/* Logo */}
-        <div className="flex items-center gap-3">
+        <Link
+          to="/home"
+          className="flex items-center gap-3 cursor-pointer select-none focus:outline-none"
+          title="Campus Marketplace"
+          aria-label="Campus Marketplace Home"
+        >
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
             style={{ backgroundColor: '#2F6B4F' }}
@@ -176,7 +189,7 @@ const Navbar = () => {
           <span className="text-xl font-bold text-[#1E293B] sm:hidden">
             CampusM
           </span>
-        </div>
+        </Link>
 
         {/* Spacer */}
         <div className="flex-1" />

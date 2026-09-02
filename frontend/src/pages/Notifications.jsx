@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -8,9 +8,11 @@ import NotificationCard from '../components/ui/NotificationCard';
 import NotificationCardSkeleton from '../components/ui/NotificationCardSkeleton';
 import SharePermissionModal from '../components/ui/SharePermissionModal';
 import EmptyState from '../components/ui/EmptyState';
+import { AuthContext } from '../context/AuthContext';
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
 
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,24 @@ const Notifications = () => {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
   const [respondingId, setRespondingId] = useState(null);
+
+  // Expiry notification action state (renew / delete-expired)
+  const [renewingId, setRenewingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  // Mark notifications as read in localStorage (does NOT delete them)
+  const markNotificationsRead = useCallback((notifList) => {
+    if (!user) return;
+    const readKey = `cm_read_notif_ids_${user.id || user._id}`;
+    try {
+      const existing = JSON.parse(localStorage.getItem(readKey) || '[]');
+      const currentIds = notifList.map((n) => String(n._id));
+      const merged = Array.from(new Set([...existing, ...currentIds]));
+      localStorage.setItem(readKey, JSON.stringify(merged));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [user]);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -40,21 +60,24 @@ const Notifications = () => {
         ...buyerRequests.filter((req) => req.status === 'approved' || req.status === 'declined'),
       ];
 
-      // Sort by newest activity (updatedAt for responses or createdAt)
+      // Sort notifications in NEWEST → OLDEST order (most recently created at the top)
       combined.sort((a, b) => {
-        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
-        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
+        const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
         return timeB - timeA;
       });
 
       setNotifications(combined);
+
+      // Mark all currently fetched notifications as read (badge will reset on next Navbar poll)
+      markNotificationsRead(combined);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
       setError(err.response?.data?.message || 'Failed to load notifications.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [markNotificationsRead]);
 
   useEffect(() => {
     fetchNotifications();
@@ -110,6 +133,42 @@ const Notifications = () => {
     }
   };
 
+  // ── Expiry: Renew listing ──────────────────────────────────────────────────
+  const handleRenew = useCallback(async (notification) => {
+    const itemId = notification.itemId?._id || notification.itemId;
+    if (!itemId) return;
+    setRenewingId(notification._id);
+    try {
+      await api.put(`/api/items/${itemId}/renew`);
+      // Remove this expiry notification from the visible list
+      setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
+      toast.success('Listing renewed! It is now visible in the marketplace again.');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to renew listing. Please try again.';
+      toast.error(msg);
+    } finally {
+      setRenewingId(null);
+    }
+  }, []);
+
+  // ── Expiry: Delete listing ─────────────────────────────────────────────────
+  const handleDeleteExpiredListing = useCallback(async (notification) => {
+    const itemId = notification.itemId?._id || notification.itemId;
+    if (!itemId) return;
+    setDeletingId(notification._id);
+    try {
+      await api.delete(`/api/items/${itemId}`);
+      // Remove this expiry notification from the visible list
+      setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
+      toast.success('Listing deleted successfully.');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to delete listing. Please try again.';
+      toast.error(msg);
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <Navbar />
@@ -163,7 +222,10 @@ const Notifications = () => {
                 notification={notification}
                 onAccept={handleAccept}
                 onDecline={handleDecline}
-                isResponding={respondingId === notification._id}
+                onRenew={handleRenew}
+                onDeleteExpired={handleDeleteExpiredListing}
+                isResponding={respondingId === notification._id || renewingId === notification._id}
+                isDeleting={deletingId === notification._id}
               />
             ))}
           </div>

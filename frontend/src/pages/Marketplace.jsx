@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../utils/api';
 import Navbar from '../components/Navbar';
 import ProductCard from '../components/ui/ProductCard';
 import ProductCardSkeleton from '../components/ui/ProductCardSkeleton';
 import EmptyState from '../components/ui/EmptyState';
 import CategoryDropdown from '../components/ui/CategoryDropdown';
+import CollegeDropdown from '../components/ui/CollegeDropdown';
 import { Search, Package } from 'lucide-react';
 
 const Marketplace = () => {
@@ -12,13 +13,14 @@ const Marketplace = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCollege, setSelectedCollege] = useState('');
   const [totalItems, setTotalItems] = useState(0);
   const [error, setError] = useState(null);
 
   const searchTimeoutRef = useRef(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Debounce search input
+  // Debounce search input — 500ms
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -47,11 +49,13 @@ const Marketplace = () => {
       if (selectedCategory) {
         params.category = selectedCategory;
       }
+      if (selectedCollege) {
+        params.collegeName = selectedCollege;
+      }
 
       const response = await api.get('/api/items', { params });
       const resData = response.data;
 
-      // Backend returns: { success: true, count: N, data: [...] }
       setItems(resData.data || []);
       setTotalItems(resData.count || 0);
     } catch (err) {
@@ -64,7 +68,7 @@ const Marketplace = () => {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, selectedCategory]);
+  }, [debouncedSearch, selectedCategory, selectedCollege]);
 
   useEffect(() => {
     fetchItems();
@@ -78,6 +82,17 @@ const Marketplace = () => {
     setSelectedCategory(category);
   };
 
+  const handleCollegeChange = (college) => {
+    setSelectedCollege(college);
+  };
+
+  // Whether any filter is active
+  const hasActiveFilters = debouncedSearch.trim() || selectedCategory || selectedCollege;
+
+  const emptyDescription = hasActiveFilters
+    ? 'No items match your current search or filters. Try adjusting your search, category, or college.'
+    : 'Be the first student to list an item on the marketplace.';
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <Navbar />
@@ -89,16 +104,16 @@ const Marketplace = () => {
         </h1>
         <p className="text-[#64748B] mt-1 text-sm sm:text-base">
           {!loading && !error
-            ? `Discover ${totalItems} items from students across campus`
+            ? 'Discover ' + totalItems + ' item' + (totalItems !== 1 ? 's' : '') + ' from students across campus'
             : 'Discover items from students across campus'}
         </p>
       </div>
 
       {/* Filters Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-6">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           {/* Search Input */}
-          <div className="relative sm:max-w-md w-full">
+          <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none w-5 h-5 text-[#64748B]" />
             <input
               type="text"
@@ -106,6 +121,7 @@ const Marketplace = () => {
               placeholder="Search items..."
               value={searchQuery}
               onChange={handleSearchChange}
+              aria-label="Search marketplace items"
             />
           </div>
 
@@ -113,6 +129,12 @@ const Marketplace = () => {
           <CategoryDropdown
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}
+          />
+
+          {/* College Dropdown */}
+          <CollegeDropdown
+            selectedCollege={selectedCollege}
+            onCollegeChange={handleCollegeChange}
           />
         </div>
       </div>
@@ -134,8 +156,8 @@ const Marketplace = () => {
         ) : items.length === 0 ? (
           <EmptyState
             icon={Package}
-            title="No items found"
-            description="Be the first student to list an item on the marketplace."
+            title={hasActiveFilters ? 'No items found for this criteria' : 'No items listed yet'}
+            description={emptyDescription}
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

@@ -73,9 +73,10 @@
   All uploads run in parallel using Promise.all() for maximum speed.
  */
 
-const cloudinary    = require('../config/cloudinary'); 
-const streamifier   = require('streamifier'); // import streamifier to convert Buffer → Readable Stream
-const Item          = require('../models/Item');
+const cloudinary     = require('../config/cloudinary'); 
+const streamifier    = require('streamifier'); // import streamifier to convert Buffer → Readable Stream
+const Item           = require('../models/Item');
+const Notification   = require('../models/Notification'); // Persistent notification records (deleted/archived/renewed)
 
 
 // ─── Helper: Upload a Single Buffer to Cloudinary ────────────────────────────
@@ -797,6 +798,21 @@ const deleteItem = async (req, res) => {
     // Delete item from MongoDB
     await item.deleteOne();
 
+    // Create a persistent notification so the seller retains deletion history.
+    // This runs AFTER successful deletion — no notification is created if deletion fails.
+    try {
+      await Notification.create({
+        userId: sellerId,
+        type: 'deleted',
+        message: `Your item "${item.title || 'Untitled'}" has been deleted.`,
+        itemTitle: item.title || 'Untitled',
+        itemId: null, // item is gone — no valid ref
+      });
+    } catch (notifErr) {
+      // Non-critical: log but don't block the response
+      console.error('Failed to create deletion notification:', notifErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Listing deleted successfully.',
@@ -865,22 +881,17 @@ const reportItem = async (req, res) => {
       });
     }
 
-/*  ── Step 3: Duplicate report check ──────────────────────────────────────
-    req.user.id  → The ID of the currently logged-in user (from JWT via protect middleware)
-    
-    Step 1 : Suppose your database contains:
-        item.reports = [ ObjectId("user1"), ObjectId("user2"), ObjectId("user3") ];
-    Step 2 : item.reports.map((id) => id.toString())
-        map() goes through every element of the array one by one and converted object to string(ObjectId("user1") to "user1").
-        After map(), the array becomes [ "user1", "user2", "user3" ]
-    Step 3 : .includes() checks if the array contains this value.
-        Now suppose the currently logged-in user is : req.user.id = "user2";
-          Then this runs .includes(req.user.id.toString()) , which becomes .includes("user2")    
-        -> it check "Is 'user2' present in this array?" 
-        the ans is yes , so it return true 
-            so, const alreadyReported = true;     */
+    // Prevent self-reporting
+    const sellerId = typeof item.seller === 'object' ? item.seller?._id : item.seller;
+    if (sellerId && sellerId.toString() === req.user.id.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot report your own item.',
+      });
+    }
+
     const alreadyReported = item.reports
-      .map((id) => id.toString())       // Convert each ObjectId → string
+      .map((id) => (id?._id || id).toString())       // Convert each ObjectId → string
       .includes(req.user.id.toString()); // Check if current user's ID is in the array
   
     if (alreadyReported) {
@@ -949,4 +960,137 @@ const reportItem = async (req, res) => {
 };
 
 
-module.exports = { createItem, getItems, getItemById, updateItem, deleteItem, reportItem };
+// ─── Controller: Get Active Colleges ─────────────────────────────────────────
+
+/**
+ * @controller getColleges
+ * @route   GET /api/items/colleges
+ * @access  Public
+ * @desc    Returns a list of distinct college names that have at least one
+ *          available item on the marketplace, along with a count per college.
+ *          Used to populate the College filter dropdown on the marketplace.
+ */
+const getColleges = async (req, res) => {
+  try {
+    const colleges = await Item.aggregate([
+      // Only include available (marketplace-visible) items
+      { $match: { status: 'available', collegeName: { $exists: true, $ne: '' } } },
+      // Group by college name and count listings per college
+      { $group: { _id: '$collegeName', count: { $sum: 1 } } },
+      // Sort alphabetically
+      { $sort: { _id: 1 } },
+      // Shape the output
+      { $project: { _id: 0, collegeName: '$_id', count: 1 } },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: colleges.length,
+      data: colleges,
+    });
+  } catch (error) {
+    console.error(`Get Colleges Error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching college list.',
+    });
+  }
+};
+
+
+// ─── Controller: Renew Listing ────────────────────────────────────────────────
+
+/**
+ * @controller renewItem
+ * @route   PUT /api/items/:id/renew
+ * @access  Private (JWT required — ONLY the seller who owns this item can renew)
+ * @desc    Resets an action_required item back to available and restarts the 30-day
+ *          expiry clock by resetting createdAt to the current time.
+ *
+ *   Security checks:
+ *     1. Item must exist.
+ *     2. Authenticated user must be the seller (ownership check).
+ *     3. Item must currently be in 'action_required' state (guards against renewing
+ *        an available, hidden, sold, or archived item by mistake).
+ */
+const renewItem = async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id);
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found.',
+      });
+    }
+
+    // Ownership check — only the actual seller can renew
+    const sellerId = typeof item.seller === 'object' ? item.seller._id : item.seller;
+    if (sellerId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to renew this listing.',
+      });
+    }
+
+    // State check — only action_required items can be renewed
+    if (item.status !== 'action_required') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot renew a listing with status '${item.status}'. Only 'action_required' listings can be renewed.`,
+      });
+    }
+
+    // Reset status and clear the expiry timestamp so the 30-day clock restarts.
+    // We use Item.findByIdAndUpdate with $currentDate to bypass Mongoose's
+    // immutable-createdAt protection and properly reset the clock.
+    const updatedItem = await Item.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          status: 'available',
+          actionRequiredAt: null,
+        },
+        $currentDate: {
+          createdAt: true, // Reset the 30-day clock to now
+        },
+      },
+      { new: true, runValidators: false }
+    );
+
+    // Create a persistent notification so the seller has a history record of the renewal.
+    try {
+      await Notification.create({
+        userId: sellerId,
+        type: 'renewed',
+        message: `Your item "${item.title || 'Untitled'}" has been renewed and is now visible in the marketplace again.`,
+        itemTitle: item.title || 'Untitled',
+        itemId: item._id,
+      });
+    } catch (notifErr) {
+      console.error('Failed to create renewal notification:', notifErr.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Listing renewed successfully! It is now visible in the marketplace again.',
+      data: updatedItem,
+    });
+
+  } catch (error) {
+    console.error(`Renew Item Error: ${error.message}`);
+    if (error.kind === 'ObjectId') {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found. Invalid ID format.',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Server error while renewing the listing. Please try again.',
+    });
+  }
+};
+
+
+module.exports = { createItem, getItems, getItemById, updateItem, deleteItem, reportItem, getColleges, renewItem };

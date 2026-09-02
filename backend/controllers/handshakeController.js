@@ -152,8 +152,9 @@
  */
 
         
-const Handshake = require('../models/Handshake'); // Imports the Handshake Model from the models directory.
-const Item      = require('../models/Item');  // Imports the Item Model bcz before creating a handshake we must verify Does the item actually exist?
+const Handshake    = require('../models/Handshake'); // Imports the Handshake Model from the models directory.
+const Item         = require('../models/Item');  // Imports the Item Model bcz before creating a handshake we must verify Does the item actually exist?
+const Notification = require('../models/Notification'); // Persistent event notifications (deleted/archived/renewed)
 
 // ─── Controller: Request Contact ─────────────────────────────────────────────
 
@@ -401,11 +402,143 @@ const getMyNotifications = async (req, res) => {
       .populate('itemId', 'title price images') // Item context for the notification
       .sort({ createdAt: -1 });                // Newest first
 
+    // ── Find reported or blocked/hidden items for this seller ───────────────
+    const reportedItems = await Item.find({
+      seller: req.user.id,
+      $or: [
+        { 'reports.0': { $exists: true } },
+        { status: 'hidden' },
+      ],
+    }).populate('reports', 'name email');
+
+    const reportNotifications = [];
+    reportedItems.forEach((item) => {
+      const reports = item.reports || [];
+      if (reports.length > 0) {
+        reports.forEach((reporter, index) => {
+          const reportNumber = index + 1;
+          const remaining = 5 - reportNumber;
+          const buyerName = (reporter && reporter.name) ? reporter.name : 'A buyer';
+          const itemTitle = item.title || 'your item';
+
+          let message = '';
+          if (remaining > 0 && item.status !== 'hidden') {
+            message = `${buyerName} reported your item: ${itemTitle}. ${remaining} more report${remaining === 1 ? '' : 's'} before this item is blocked.`;
+          } else {
+            message = `${buyerName} reported your item: ${itemTitle}. This item has reached 5 reports and is now blocked.`;
+          }
+
+          reportNotifications.push({
+            _id: `report-${item._id}-${reporter?._id || reporter}-${index}`,
+            type: 'report',
+            status: 'report',
+            reportNumber,
+            remainingReports: Math.max(0, remaining),
+            isBlocked: reportNumber >= 5 || item.status === 'hidden',
+            buyerId: {
+              _id: reporter?._id || reporter,
+              name: reporter?.name || 'Buyer',
+              email: reporter?.email || '',
+            },
+            itemId: {
+              _id: item._id,
+              title: item.title,
+              price: item.price,
+              images: item.images,
+              status: item.status,
+            },
+            message,
+            createdAt: item.updatedAt || item.createdAt,
+            updatedAt: item.updatedAt || item.createdAt,
+          });
+        });
+      } else if (item.status === 'hidden') {
+        reportNotifications.push({
+          _id: `blocked-${item._id}`,
+          type: 'report',
+          status: 'report',
+          reportNumber: 5,
+          remainingReports: 0,
+          isBlocked: true,
+          buyerId: {
+            _id: 'moderation',
+            name: 'Moderation System',
+            email: '',
+          },
+          itemId: {
+            _id: item._id,
+            title: item.title,
+            price: item.price,
+            images: item.images,
+            status: item.status,
+          },
+          message: `Your item "${item.title || 'your item'}" has reached the moderation threshold and is blocked.`,
+          createdAt: item.updatedAt || item.createdAt,
+          updatedAt: item.updatedAt || item.createdAt,
+        });
+      }
+    });
+
+    // ── Find action_required items for this seller (expiry notifications) ───
+    const expiryItems = await Item.find({
+      seller: req.user.id,
+      status: 'action_required',
+    });
+
+    const expiryNotifications = expiryItems.map((item) => ({
+      _id: `expiry-${item._id}`,
+      type: 'expiry',
+      status: 'action_required',
+      itemId: {
+        _id: item._id,
+        title: item.title,
+        price: item.price,
+        images: item.images,
+        status: item.status,
+      },
+      message: `Your item ${item.title || 'your item'} requires your attention.`,
+      // Use actionRequiredAt as the notification time so it sorts correctly
+      createdAt: item.actionRequiredAt || item.updatedAt || item.createdAt,
+      updatedAt: item.updatedAt || item.createdAt,
+    }));
+
+    // ── Fetch persisted notifications (deleted / archived / renewed) ──────────
+    // These are event-based records created when an item is deleted, auto-archived
+    // by the cron, or renewed by the seller. They have real MongoDB _id values so
+    // the existing localStorage badge/read system handles them automatically.
+    const persistedNotifications = await Notification.find({
+      userId: req.user.id,
+    }).sort({ createdAt: -1 });
+
+    // Map persisted records to the shape the frontend expects
+    const persistedFormatted = persistedNotifications.map((n) => ({
+      _id: n._id.toString(),
+      type: n.type,            // 'deleted' | 'archived' | 'renewed'
+      status: n.type,
+      message: n.message,
+      itemTitle: n.itemTitle,
+      itemId: n.itemId ? { _id: n.itemId, title: n.itemTitle } : null,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+    }));
+
+    // Combine all seller notifications (contact requests + reports + expiry + persisted history)
+    const combinedNotifications = [
+      ...notifications,
+      ...reportNotifications,
+      ...expiryNotifications,
+      ...persistedFormatted,
+    ].sort((a, b) => {
+      const timeB = new Date(b.createdAt || b.updatedAt).getTime();
+      const timeA = new Date(a.createdAt || a.updatedAt).getTime();
+      return timeB - timeA;
+    });
+
     // ── Return the notification feed ─────────────────────────────────────
     res.status(200).json({
       success: true,
-      count: notifications.length, // e.g., "You have 3 pending requests"
-      data: notifications,
+      count: combinedNotifications.length,
+      data: combinedNotifications,
     });
 
   } catch (error) {
