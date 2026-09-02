@@ -72,8 +72,8 @@ const startCronJobs = () => {
    * FOR TESTING: Uncomment the testing line and comment out the production line.
    * Once verified, swap them back for production.
    */
-  // cron.schedule('0 0 * * *', async () => {  // PRODUCTION: midnight daily
-  cron.schedule('* * * * *', async () => {     // TESTING: every minute
+  cron.schedule('0 0 * * *', async () => {  // PRODUCTION: midnight daily
+  // cron.schedule('* * * * *', async () => {     // TESTING: every minute
 
     try {
       console.log('[CRON] Running listing expiry and archive check...');
@@ -182,7 +182,7 @@ const startCronJobs = () => {
     }
   });
 
-  console.log('[CRON] Scheduled jobs initialized. Testing thresholds: 1-min expiry, 2-min archive.');
+  console.log('[CRON] Scheduled jobs initialized. Production thresholds: 30-day expiry, 7-day archive.');
 };
 
 module.exports = startCronJobs;
