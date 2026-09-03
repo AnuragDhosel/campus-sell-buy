@@ -88,19 +88,6 @@ const connectDB = require('./config/db');
 // ─── Background Jobs ─────────────────────────────────────────────────────────
 const startCronJobs = require('./utils/cronJob'); // Day 4: Midnight listing expiry , import the cron job function
 
-// ─── Connect to MongoDB ───────────────────────────────────────────────────────
-connectDB();
-
-// ─── Start Background Cron Jobs ───────────────────────────────────────────────
-// Called AFTER connectDB() because the cron job queries MongoDB.
-// If DB is not connected, the cron queries would fail.
-startCronJobs(); 
-/*  "startCronJobs() :
-        is a function that starts the cron scheduler when the server starts. It doesn't execute the scheduled 
-    task immediately. Instead, it registers the cron schedules with Node-Cron. After that, Node-Cron waits for 
-  the specified time, such as midnight, and automatically runs the scheduled task without any user request."
-*/
-
 // ─── Initialize Express App ───────────────────────────────────────────────────
 const app = express();
 
@@ -178,8 +165,28 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
+// ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-});
+const startServer = async () => {
+  // ─── Connect to MongoDB ───────────────────────────────────────────────────────
+  await connectDB();
+
+  // ─── Start Background Cron Jobs ───────────────────────────────────────────────
+ // Called AFTER connectDB() because the cron job queries MongoDB.
+// If DB is not connected, the cron queries would fail.
+  startCronJobs();
+  /*  "startCronJobs() :
+        is a function that starts the cron scheduler when the server starts. It doesn't execute the scheduled 
+    task immediately. Instead, it registers the cron schedules with Node-Cron. After that, Node-Cron waits for 
+  the specified time, such as midnight, and automatically runs the scheduled task without any user request."
+*/
+
+  app.listen(PORT, () => {
+    console.log(
+      `🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`
+    );
+  });
+};
+
+startServer();
