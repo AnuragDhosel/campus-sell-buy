@@ -1,8 +1,11 @@
 import axios from 'axios';
 
+const rawBaseURL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const baseURL = rawBaseURL.replace(/\/+$/, '');
+
 // Create an Axios instance with base URL for our backend
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+  baseURL,
 });
 
 // Request interceptor: Attach JWT token to headers if it exists
