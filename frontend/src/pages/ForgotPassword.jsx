@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, ArrowLeft, KeyRound, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
@@ -24,6 +24,17 @@ const ForgotPassword = () => {
   const [otp, setOtp]             = useState("");
   const [loadingOtp, setLoadingOtp]   = useState(false);
 
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Countdown timer for resending OTP
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   // ── Step 1: Send OTP ────────────────────────────────────────────────────────
   const handleSendOtp = async (e) => {
     e.preventDefault();
@@ -32,7 +43,8 @@ const ForgotPassword = () => {
     try {
       setLoadingEmail(true);
       await api.post("/api/auth/forgot-password", { email: email.trim() });
-      toast.success("OTP sent! Check your email (or dev console).");
+      toast.success("OTP sent! Please check your email inbox.");
+      setResendCooldown(30);
       setStep(2);
     } catch (error) {
       toast.error(
@@ -43,17 +55,36 @@ const ForgotPassword = () => {
     }
   };
 
+  // ── Direct Resend OTP ───────────────────────────────────────────────────────
+  const handleResendOtp = async () => {
+    if (loadingEmail || resendCooldown > 0) return;
+    try {
+      setLoadingEmail(true);
+      setOtp("");
+      await api.post("/api/auth/forgot-password", { email: email.trim() });
+      toast.success("New OTP sent! Please check the latest email in your inbox.");
+      setResendCooldown(30);
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to resend OTP. Please try again."
+      );
+    } finally {
+      setLoadingEmail(false);
+    }
+  };
+
   // ── Step 2: Verify OTP ──────────────────────────────────────────────────────
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (!otp.trim()) return toast.error("Please enter the OTP.");
-    if (otp.trim().length !== 6) return toast.error("OTP must be exactly 6 digits.");
+    const cleanOtp = otp.replace(/\D/g, "").trim();
+    if (!cleanOtp) return toast.error("Please enter the OTP.");
+    if (cleanOtp.length !== 6) return toast.error("OTP must be exactly 6 digits.");
 
     try {
       setLoadingOtp(true);
       const res = await api.post("/api/auth/verify-otp", {
         email: email.trim(),
-        otp: otp.trim(),
+        otp: cleanOtp,
       });
 
       const { resetToken } = res.data;
@@ -63,7 +94,7 @@ const ForgotPassword = () => {
       navigate("/reset-password", { state: { resetToken }, replace: true });
     } catch (error) {
       toast.error(
-        error.response?.data?.message || "OTP verification failed. Please try again."
+        error.response?.data?.message || "OTP verification failed. Please check your latest email."
       );
     } finally {
       setLoadingOtp(false);
@@ -87,7 +118,7 @@ const ForgotPassword = () => {
         <p className="mt-2 text-sm text-[#64748B]">
           {step === 1
             ? "Enter your email and we will send you a 6-digit OTP."
-            : `We sent a 6-digit OTP to ${email}. It expires in 10 minutes.`}
+            : `We sent a 6-digit OTP to ${email}. If multiple emails arrive, please use the newest one.`}
         </p>
       </div>
 
@@ -149,7 +180,7 @@ const ForgotPassword = () => {
                   required
                 />
                 <p className="mt-2 text-xs text-[#94A3B8] text-center">
-                  Check your email inbox or dev console for the OTP.
+                  Enter the latest 6-digit code from your email inbox.
                 </p>
               </div>
 
@@ -166,16 +197,33 @@ const ForgotPassword = () => {
               </button>
 
               {/* Resend OTP */}
-              <div className="text-center">
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-[#F1F5F9]">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={loadingEmail || resendCooldown > 0}
+                  className={`font-semibold transition ${
+                    resendCooldown > 0 || loadingEmail
+                      ? "text-[#94A3B8] cursor-not-allowed"
+                      : "text-[#2F6B4F] hover:underline"
+                  }`}
+                >
+                  {loadingEmail
+                    ? "Sending..."
+                    : resendCooldown > 0
+                    ? `Resend OTP in ${resendCooldown}s`
+                    : "Resend new OTP"}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     setOtp("");
                     setStep(1);
                   }}
-                  className="text-xs text-[#2F6B4F] font-medium hover:underline"
+                  className="text-[#64748B] hover:text-[#1E293B] hover:underline"
                 >
-                  Did not receive OTP? Go back and resend
+                  Change email
                 </button>
               </div>
             </form>

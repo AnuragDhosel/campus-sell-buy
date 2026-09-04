@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file controllers/authController.js
  * @description Business logic for user authentication.
  *
@@ -140,13 +140,20 @@ const forgotPassword = async (req, res) => {
     user.resetOtpTokenExpire = undefined;
     await user.save({ validateBeforeSave: false });
 
-    const htmlContent = otpEmail({ userName: user.name, otp: rawOtp });
+    const timeFormatted = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
+
+    const htmlContent = otpEmail({ userName: user.name, otp: rawOtp, timeStr: timeFormatted });
 
     // console.log('User email:', user.email);
     try {
       await sendEmail({
         to: user.email,
-        subject: 'Campus Marketplace — Password Reset OTP',
+        subject: `Campus Marketplace — Password Reset OTP [${timeFormatted}]`,
         html: htmlContent,
       });
     } catch (emailError) {
@@ -182,10 +189,12 @@ const forgotPassword = async (req, res) => {
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
 
-  if (!email || !otp) {
+  const cleanOtp = String(otp || '').replace(/\D/g, '').trim();
+
+  if (!email || !cleanOtp) {
     return res.status(400).json({ success: false, message: 'Please provide both email and OTP.' });
   }
-  if (String(otp).trim().length !== 6) {
+  if (cleanOtp.length !== 6) {
     return res.status(400).json({ success: false, message: 'OTP must be exactly 6 digits.' });
   }
 
@@ -212,9 +221,12 @@ const verifyOtp = async (req, res) => {
     }
 
     // Verify OTP
-    const isValid = await bcrypt.compare(String(otp).trim(), user.resetOtp);
+    const isValid = await bcrypt.compare(cleanOtp, user.resetOtp);
     if (!isValid) {
-      return res.status(400).json({ success: false, message: 'Incorrect OTP. Please try again.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Incorrect OTP. Please check your newest email and enter the latest 6-digit code.',
+      });
     }
 
     // OTP verified — generate reset token

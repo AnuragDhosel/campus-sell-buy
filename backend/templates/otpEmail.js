@@ -7,7 +7,7 @@
  * @param {string} options.otp      - The 6-digit OTP to embed in the email.
  * @returns {string} HTML string ready to be passed to sendEmail().
  */
-const otpEmail = ({ userName, otp }) => `
+const otpEmail = ({ userName, otp, timeStr }) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -43,7 +43,7 @@ const otpEmail = ({ userName, otp }) => `
               <div style="background:#F0FDF4;border:2px solid #2F6B4F;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;">
                 <p style="margin:0 0 8px;color:#64748B;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Your One-Time Password</p>
                 <div style="font-size:40px;font-weight:800;letter-spacing:10px;color:#2F6B4F;font-family:'Courier New',monospace;">${otp}</div>
-                <p style="margin:12px 0 0;color:#94A3B8;font-size:12px;">⏱ Valid for <strong>10 minutes</strong> only</p>
+                <p style="margin:12px 0 0;color:#64748B;font-size:12px;">Requested at <strong>${timeStr || 'just now'}</strong> (Valid for 10 minutes)</p>
               </div>
 
               <!-- Warning -->
