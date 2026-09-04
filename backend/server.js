@@ -77,6 +77,7 @@ dotenv.config();
 const authRoutes       = require('./routes/auth');
 const itemsRoutes      = require('./routes/items');       // Day 3: Item listing routes
 const handshakeRoutes  = require('./routes/handshakes');   // Day 5: Contact request system
+const uploadRoutes     = require('./routes/upload');        // Cloudinary signed upload for Vercel
 
 // ─── Middleware Imports , check authentication ────────────────────────────────
 const { protect } = require('./middleware/authMiddleware');
@@ -94,17 +95,28 @@ const app = express();
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
-// Enable CORS so the React frontend (on a different port) can talk to this API.
-// In production, restrict this to your actual frontend domain.
-app.use(cors());  // imports the CORS package.
-// cors() creates middleware.
-// app.use() registers that middleware for every incoming request.
+// Enable CORS — allow the Vercel frontend and local dev to talk to this API.
+const allowedOrigins = [
+  'https://campus-sell-buy.vercel.app',
+  'http://localhost:5173',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman) or from allowed list
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    }
+  },
+  credentials: true,
+}));
 
-// ➡️ Converts incoming JSON data into req.body.
-app.use(express.json());
+// ➡️ Converts incoming JSON data into req.body (limit raised for safety).
+app.use(express.json({ limit: '10mb' }));
 
 // ➡️ Converts incoming HTML form data (application/x-www-form-urlencoded) into req.body.
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
@@ -113,6 +125,9 @@ app.use('/api/auth', authRoutes);
 
 // Items Routes: Create listing, browse listings (mixed public/private)
 app.use('/api/items', itemsRoutes);
+
+// Upload Routes: Cloudinary signed upload (frontend uploads directly to Cloudinary)
+app.use('/api/upload', uploadRoutes);
 
 // Handshake Routes: Contact requests, notifications, approve/decline (all private)
 app.use('/api/handshakes', handshakeRoutes);

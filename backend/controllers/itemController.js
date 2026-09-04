@@ -234,15 +234,56 @@ const uploadToCloudinary = (fileBuffer, folder) => {
 
 const createItem = async (req, res) => {
   try {
-    /* ── Step 1: Verify at least 1 image was uploaded ───────────────────────
-    When Multer receives uploaded images, it stores them inside - req.files
-    * Suppose user uploads :- image1.jpg , image2.jpg , image3.jpg
-      Then , 
-          req.files -> becomes -> [file1, file2, file3]
-          If user uploads nothing -> []
-          if multer does not receive any file, req.files will be undefined.
+    let imageData = [];
+
+    /* ── Mode A: Frontend sent pre-uploaded Cloudinary URLs (JSON body) ──────
+       Used when frontend uploads directly to Cloudinary (e.g. on Vercel where
+       multipart/form-data bodies are size-limited at the serverless edge).
+       
+       Expected payload:
+         {
+           images: [ { url: "https://res.cloudinary.com/...", publicId: "campus_marketplace/items/..." }, ... ],
+           title, description, price, category, collegeName, hostelName, roomNumber, sellerPhoneNumber
+         }
     */
-    if (!req.files || req.files.length === 0) {
+    if (req.body.images && Array.isArray(req.body.images) && req.body.images.length > 0) {
+      // Validate each image entry
+      for (const img of req.body.images) {
+        if (!img.url || !img.publicId) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid image data. Each image must have url and publicId.',
+          });
+        }
+      }
+      imageData = req.body.images.map((img) => ({
+        url:      img.url,
+        publicId: img.publicId,
+      }));
+    }
+
+    /* ── Mode B: Files uploaded via Multer (traditional multipart) ───────────
+       Used in local dev or environments without body size restrictions.
+    */
+    else if (req.files && req.files.length > 0) {
+      /* ── Step 3: Upload ALL images to Cloudinary in parallel ────────────────
+          req.files.map() runs once for each uploaded file.
+          uploadToCloudinary() returns a Promise for each file.
+          Promise.all() waits for ALL uploads to finish in parallel.
+      */
+      const uploadPromises = req.files.map((file) =>
+        uploadToCloudinary(file.buffer, 'campus_marketplace/items')
+      );
+      const cloudinaryResults = await Promise.all(uploadPromises);
+
+      imageData = cloudinaryResults.map((result) => ({
+        url:      result.secure_url,
+        publicId: result.public_id,
+      }));
+    }
+
+    /* ── No images provided at all ──────────────────────────────────────────── */
+    else {
       return res.status(400).json({
         success: false,
         message: 'Please upload at least one image for your listing.',
@@ -302,32 +343,6 @@ const createItem = async (req, res) => {
       });
     }
 
-    /* ── Step 3: Upload ALL images to Cloudinary in parallel ────────────────
-        * const uploadPromises = 
-            Here we create an array. But this array contains : Promises , not URLs.
-              promise contains : A Promise contains the state of an asynchronous task, here the asynchronous task is : Uploading an image to Cloudinary, so it contains the state of that upload.
-        * req.files.map()
-            Suppose : 3 images , map() will run once for every image.
-        * uploadToCloudinary(file.buffer, 'campus_marketplace/items')     
-            - Each time map() runs, it calls uploadToCloudinary() which returns a Promise.
-            - file.buffer => The raw binary data of the image (from Multer memoryStorage).
-            - 'campus_marketplace/items' => The Cloudinary folder to store images in.
-        
-        * After map
-            - [ Promise, Promise, Promise ] 
-            - No upload has finished yet, it contains Just promises.        
-          */
-    const uploadPromises = req.files.map((file) =>
-      uploadToCloudinary(file.buffer, 'campus_marketplace/items') // Returns a Promise for each file
-    );
-
-    const cloudinaryResults = await Promise.all(uploadPromises); // Waits for all uploads to finish (or any to fail)
-
-    const imageData = cloudinaryResults.map((result) => ({
-      url:      result.secure_url,  // Permanent HTTPS link (displayed on frontend)
-      publicId: result.public_id,   // Cloudinary asset ID (used for future delete/replace)
-    }));
-
     /* ── Step 5: Create the Item document in MongoDB ──────────────────────── */
     const newItem = await Item.create({
       title,
@@ -354,6 +369,8 @@ const createItem = async (req, res) => {
     // Catch Mongoose validation errors (missing required fields, etc.)
     // and Cloudinary errors (auth failure, network issues, etc.)
     console.error(`Create Item Error: ${error.message}`);
+    console.error(`Create Item Stack: ${error.stack}`);
+    console.error(`Create Item Error Name: ${error.name}`);
 
     // Handle Mongoose validation errors specifically for a cleaner response
     if (error.name === 'ValidationError') {
@@ -364,9 +381,17 @@ const createItem = async (req, res) => {
       });
     }
 
+    // Cloudinary errors
+    if (error.http_code || error.message?.includes('cloudinary')) {
+      return res.status(500).json({
+        success: false,
+        message: `Image upload failed: ${error.message}`,
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: 'Server error while creating the listing. Please try again.',
+      message: error.message || 'Server error while creating the listing. Please try again.',
     });
   }
 };

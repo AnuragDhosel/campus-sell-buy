@@ -152,22 +152,46 @@ const SellItem = () => {
     setIsSubmitting(true);
 
     try {
-      const data = new FormData();
-      data.append('title', formData.title.trim());
-      data.append('description', formData.description.trim());
-      data.append('price', formData.price);
-      data.append('category', formData.category);
-      data.append('collegeName', formData.collegeName.trim());
-      data.append('hostelName', formData.hostelName.trim());
-      data.append('roomNumber', formData.roomNumber.trim());
-      data.append('sellerPhoneNumber', formData.sellerPhoneNumber.trim());
+      // ── Step 1: Get a Cloudinary signed upload credential from our backend ──
+      const signRes = await api.post('/api/upload/sign');
+      const { signature, timestamp, folder, cloud_name, api_key } = signRes.data;
 
-      images.forEach((img) => {
-        data.append('images', img.file);
-      });
+      // ── Step 2: Upload each image DIRECTLY to Cloudinary (bypasses Vercel's body limit) ──
+      const uploadedImages = await Promise.all(
+        images.map(async (img) => {
+          const cloudForm = new FormData();
+          cloudForm.append('file', img.file);
+          cloudForm.append('api_key', api_key);
+          cloudForm.append('timestamp', timestamp);
+          cloudForm.append('signature', signature);
+          cloudForm.append('folder', folder);
 
-      await api.post('/api/items', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+          const cloudRes = await fetch(
+            `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+            { method: 'POST', body: cloudForm }
+          );
+
+          if (!cloudRes.ok) {
+            const err = await cloudRes.json();
+            throw new Error(err.error?.message || 'Image upload to Cloudinary failed.');
+          }
+
+          const cloudData = await cloudRes.json();
+          return { url: cloudData.secure_url, publicId: cloudData.public_id };
+        })
+      );
+
+      // ── Step 3: Send only the image URLs + form data as JSON to our backend ──
+      await api.post('/api/items', {
+        title:               formData.title.trim(),
+        description:         formData.description.trim(),
+        price:               formData.price,
+        category:            formData.category,
+        collegeName:         formData.collegeName.trim(),
+        hostelName:          formData.hostelName.trim(),
+        roomNumber:          formData.roomNumber.trim(),
+        sellerPhoneNumber:   formData.sellerPhoneNumber.trim(),
+        images:              uploadedImages,
       });
 
       toast.success('Item listed successfully! 🎉');
@@ -189,12 +213,13 @@ const SellItem = () => {
 
       navigate('/my-listings');
     } catch (error) {
-      const msg = error.response?.data?.message || 'Failed to list item. Please try again.';
+      const msg = error.response?.data?.message || error.message || 'Failed to list item. Please try again.';
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
