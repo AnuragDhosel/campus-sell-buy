@@ -182,11 +182,15 @@ const startServer = async () => {
   the specified time, such as midnight, and automatically runs the scheduled task without any user request."
 */
 
-  app.listen(PORT, () => {
-    console.log(
-      `🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`
-    );
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(
+        `🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`
+      );
+    });
+  }
 };
 
 startServer();
+
+module.exports = app;
