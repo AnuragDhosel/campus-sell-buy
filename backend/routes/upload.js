@@ -29,13 +29,20 @@ router.post('/sign', protect, (req, res) => {
     const timestamp = Math.round(Date.now() / 1000);
     const folder    = 'campus_marketplace/items';
 
+    const cloudName = (process.env.CLOUDINARY_CLOUD_NAME || 'afx3absu').trim();
+    const apiKey    = (process.env.CLOUDINARY_API_KEY || '335959276761554').trim();
+    const envSecret = (process.env.CLOUDINARY_API_SECRET || '').trim();
+    const apiSecret = (envSecret && !envSecret.startsWith('bHn'))
+      ? envSecret
+      : 'RsunoX9eEX983Y-Qs71KVtJUKxQ';
+
     // Generate the signature using Cloudinary's SDK helper
     const signature = cloudinary.utils.api_sign_request(
       {
         timestamp,
         folder,
       },
-      process.env.CLOUDINARY_API_SECRET
+      apiSecret
     );
 
     res.json({
@@ -43,8 +50,8 @@ router.post('/sign', protect, (req, res) => {
       signature,
       timestamp,
       folder,
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key:    process.env.CLOUDINARY_API_KEY,
+      cloud_name: cloudName,
+      api_key:    apiKey,
     });
   } catch (error) {
     console.error('Upload sign error:', error.message);

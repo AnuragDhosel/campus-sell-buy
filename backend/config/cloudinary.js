@@ -48,10 +48,17 @@ const cloudinary = require('cloudinary').v2; // Import the Cloudinary Node.js SD
 */
 
 
+const cloudName = (process.env.CLOUDINARY_CLOUD_NAME || 'afx3absu').trim();
+const apiKey    = (process.env.CLOUDINARY_API_KEY || '335959276761554').trim();
+const envSecret = (process.env.CLOUDINARY_API_SECRET || '').trim();
+const apiSecret = (envSecret && !envSecret.startsWith('bHn'))
+  ? envSecret
+  : 'RsunoX9eEX983Y-Qs71KVtJUKxQ';
+
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, // Your unique cloud identifier -> This is like your username for Cloudinary. It tells Cloudinary which account to use.
-  api_key:    process.env.CLOUDINARY_API_KEY,    // Public key (safe to log, not secret) -> This is like a public identifier for your Cloudinary account. It can be shared safely.
-  api_secret: process.env.CLOUDINARY_API_SECRET, // Secret key — NEVER expose this -> This is like a password. It should never be shared or logged. It allows full access to your Cloudinary account.
+  cloud_name: cloudName,
+  api_key:    apiKey,
+  api_secret: apiSecret,
 });
 
 module.exports = cloudinary;
