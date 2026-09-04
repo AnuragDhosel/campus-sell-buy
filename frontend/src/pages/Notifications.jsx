@@ -64,7 +64,12 @@ const Notifications = () => {
       combined.sort((a, b) => {
         const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
         const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
-        return timeB - timeA;
+        if (timeB !== timeA) return timeB - timeA;
+        // If same timestamp and both are report notifications, higher reportNumber comes first
+        if (a.type === 'report' && b.type === 'report') {
+          return (b.reportNumber || 0) - (a.reportNumber || 0);
+        }
+        return 0;
       });
 
       setNotifications(combined);

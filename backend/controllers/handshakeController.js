@@ -415,7 +415,9 @@ const getMyNotifications = async (req, res) => {
     reportedItems.forEach((item) => {
       const reports = item.reports || [];
       if (reports.length > 0) {
-        reports.forEach((reporter, index) => {
+        // Iterate from newest report (highest index) down to oldest report (index 0)
+        for (let index = reports.length - 1; index >= 0; index--) {
+          const reporter = reports[index];
           const reportNumber = index + 1;
           const remaining = 5 - reportNumber;
           const buyerName = (reporter && reporter.name) ? reporter.name : 'A buyer';
@@ -427,6 +429,10 @@ const getMyNotifications = async (req, res) => {
           } else {
             message = `${buyerName} reported your item: ${itemTitle}. This item has reached 5 reports and is now blocked.`;
           }
+
+          // Offset timestamp slightly by index so newer reports have strictly newer timestamps
+          const baseTime = new Date(item.updatedAt || item.createdAt).getTime();
+          const reportTime = new Date(baseTime + index * 1000);
 
           reportNotifications.push({
             _id: `report-${item._id}-${reporter?._id || reporter}-${index}`,
@@ -448,10 +454,10 @@ const getMyNotifications = async (req, res) => {
               status: item.status,
             },
             message,
-            createdAt: item.updatedAt || item.createdAt,
-            updatedAt: item.updatedAt || item.createdAt,
+            createdAt: reportTime,
+            updatedAt: reportTime,
           });
-        });
+        }
       } else if (item.status === 'hidden') {
         reportNotifications.push({
           _id: `blocked-${item._id}`,
@@ -531,7 +537,12 @@ const getMyNotifications = async (req, res) => {
     ].sort((a, b) => {
       const timeB = new Date(b.createdAt || b.updatedAt).getTime();
       const timeA = new Date(a.createdAt || a.updatedAt).getTime();
-      return timeB - timeA;
+      if (timeB !== timeA) return timeB - timeA;
+      // If same timestamp and both are reports, higher reportNumber (newest report) comes first
+      if (a.type === 'report' && b.type === 'report') {
+        return (b.reportNumber || 0) - (a.reportNumber || 0);
+      }
+      return 0;
     });
 
     // ── Return the notification feed ─────────────────────────────────────
