@@ -123,6 +123,15 @@ const ProductDetails = () => {
         setError('not_found');
       } else {
         setItem(data);
+        if (user && Array.isArray(data.reports)) {
+          const currentUserId = String(user.id || user._id);
+          const alreadyReported = data.reports.some(
+            (r) => String(r?._id || r) === currentUserId
+          );
+          if (alreadyReported) {
+            setHasReported(true);
+          }
+        }
       }
     } catch (err) {
       if (err.response?.status === 404) {
@@ -133,7 +142,20 @@ const ProductDetails = () => {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, user]);
+
+  // Sync reported status whenever item or user updates
+  useEffect(() => {
+    if (item && user && Array.isArray(item.reports)) {
+      const currentUserId = String(user.id || user._id);
+      const isReported = item.reports.some(
+        (r) => String(r?._id || r) === currentUserId
+      );
+      if (isReported) {
+        setHasReported(true);
+      }
+    }
+  }, [item, user]);
 
   useEffect(() => {
     if (id) fetchItem();
@@ -247,14 +269,33 @@ const ProductDetails = () => {
    */
   const handleReport = async () => {
     if (isReporting || !item) return;
+
+    if (hasReported) {
+      setShowReportModal(false);
+      toast('You have already reported this item.', { icon: 'ℹ️' });
+      return;
+    }
+
     setIsReporting(true);
     try {
       const response = await api.put(`/api/items/${item._id}/report`);
-      setHasReported(true);
       setShowReportModal(false);
+
+      if (response.data?.alreadyReported) {
+        setHasReported(true);
+        toast('You have already reported this item.', { icon: 'ℹ️' });
+        return;
+      }
+
+      if (response.data?.isOwnItem) {
+        toast.error('You cannot report your own item.');
+        return;
+      }
+
+      setHasReported(true);
       toast.success(response.data?.message || 'Item reported successfully. Thank you!');
       // If backend auto-hid the item, reflect that locally
-      if (response.data?.itemStatus === 'hidden') {
+      if (response.data?.itemStatus === 'hidden' || response.data?.wasAutoHidden) {
         setItem((prev) => ({ ...prev, status: 'hidden' }));
       }
     } catch (err) {
@@ -437,6 +478,13 @@ const ProductDetails = () => {
             {phone && (
               <a
                 href={`tel:${phone}`}
+                onClick={() => {
+                  if (navigator.clipboard && phone) {
+                    navigator.clipboard.writeText(phone).then(() => {
+                      toast.success(`Copied phone number (${phone}) to clipboard!`);
+                    }).catch(() => {});
+                  }
+                }}
                 className="saas-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
               >
                 <Phone className="w-3.5 h-3.5" />

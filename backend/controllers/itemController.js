@@ -909,8 +909,9 @@ const reportItem = async (req, res) => {
     // Prevent self-reporting
     const sellerId = typeof item.seller === 'object' ? item.seller?._id : item.seller;
     if (sellerId && sellerId.toString() === req.user.id.toString()) {
-      return res.status(400).json({
+      return res.status(200).json({
         success: false,
+        isOwnItem: true,
         message: 'You cannot report your own item.',
       });
     }
@@ -920,8 +921,9 @@ const reportItem = async (req, res) => {
       .includes(req.user.id.toString()); // Check if current user's ID is in the array
   
     if (alreadyReported) {
-      return res.status(400).json({
-        success: false,
+      return res.status(200).json({
+        success: true,
+        alreadyReported: true,
         message: 'You have already reported this item.',
       });
     }

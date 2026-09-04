@@ -202,6 +202,13 @@ const MyRequests = () => {
                         {phone && (
                           <a
                             href={`tel:${phone}`}
+                            onClick={() => {
+                              if (navigator.clipboard && phone) {
+                                navigator.clipboard.writeText(phone).then(() => {
+                                  toast.success(`Copied phone number (${phone}) to clipboard!`);
+                                }).catch(() => {});
+                              }
+                            }}
                             className="saas-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
                           >
                             <Phone className="w-3.5 h-3.5" />

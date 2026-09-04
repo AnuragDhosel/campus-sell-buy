@@ -4,7 +4,80 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Campus Marketplace</title>
+    <script>
+      (function () {
+        function shouldSuppress(msg) {
+          if (!msg) return false;
+          var s = String(msg);
+          return (
+            s.includes('startTime') ||
+            s.includes('reportAllChanges') ||
+            s.includes('web-vitals')
+          );
+        }
+
+        // 1. Intercept PerformanceObserver callbacks to prevent undefined entry errors
+        if (typeof window !== 'undefined' && window.PerformanceObserver) {
+          var OriginalPO = window.PerformanceObserver;
+          window.PerformanceObserver = function (callback) {
+            var safeCallback = function (entryList, obs) {
+              try {
+                return callback(entryList, obs);
+              } catch (err) {
+                if (err && shouldSuppress(err.message)) {
+                  return;
+                }
+                throw err;
+              }
+            };
+            return new OriginalPO(safeCallback);
+          };
+          window.PerformanceObserver.prototype = OriginalPO.prototype;
+          window.PerformanceObserver.supportedEntryTypes = OriginalPO.supportedEntryTypes;
+        }
+
+        // 2. Global error event listener (capture phase)
+        window.addEventListener(
+          'error',
+          function (e) {
+            var msg = e.message || (e.error && e.error.message) || '';
+            if (shouldSuppress(msg)) {
+              e.stopImmediatePropagation();
+              e.preventDefault();
+              return true;
+            }
+          },
+          true
+        );
+
+        // 3. Unhandled promise rejections
+        window.addEventListener(
+          'unhandledrejection',
+          function (e) {
+            var reason = e.reason;
+            var msg = (reason && (reason.message || reason)) || '';
+            if (shouldSuppress(msg)) {
+              e.stopImmediatePropagation();
+              e.preventDefault();
+            }
+          },
+          true
+        );
+
+        // 4. window.onerror fallback
+        var origOnError = window.onerror;
+        window.onerror = function (msg, url, lineNo, colNo, error) {
+          if (shouldSuppress(msg) || (error && shouldSuppress(error.message))) {
+            return true;
+          }
+          if (typeof origOnError === 'function') {
+            return origOnError.apply(this, arguments);
+          }
+          return false;
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
