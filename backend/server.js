@@ -95,19 +95,16 @@ const app = express();
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
-// Enable CORS — allow the Vercel frontend and local dev to talk to this API.
-const allowedOrigins = [
-  'https://campus-sell-buy.vercel.app',
-  'http://localhost:5173',
-];
+// Enable CORS — allow Vercel frontend deployments and local dev to talk to this API.
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman) or from allowed list
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    // Allow all vercel.app domains and localhost ports
+    if (origin.endsWith('.vercel.app') || origin.startsWith('http://localhost:')) {
+      return callback(null, true);
     }
+    callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
 }));
@@ -146,7 +143,15 @@ app.get('/api/test-profile', protect, (req, res) => {
   });
 });
 
-// ─── Health Check Route ───────────────────────────────────────────────────────
+// ─── Health Check & Root Routes ──────────────────────────────────────────────
+// Root endpoint to verify the API is alive when opened directly in a browser.
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Campus Marketplace API is up and running 🚀',
+  });
+});
+
 // A simple GET endpoint to verify the server is alive.
 // Accessible at: http://localhost:5000/api/health
 app.get('/api/health', (req, res) => {
