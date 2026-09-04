@@ -1,4 +1,4 @@
-﻿import React, { memo, useState, useEffect } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Calendar, Pencil, Trash2, ImageOff, Users } from 'lucide-react';
 import api from '../../utils/api';
@@ -80,6 +80,10 @@ const MyListingCard = ({ item, onEdit, onDelete }) => {
               <img
                 src={item.images[0].url}
                 alt={item.title}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&auto=format&fit=crop&q=80';
+                }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"
               />
